@@ -1,0 +1,6 @@
+{
+    "python.defaultInterpreterPath": "/home/kaldah/venvs/scratchpad/bin/python",
+    "terminal.integrated.env.linux": {
+        "PATH": "/home/kaldah/venvs/scratchpad/bin:${env:PATH}"
+    }
+}

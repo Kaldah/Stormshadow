@@ -4,7 +4,7 @@ It includes configuration types and data structures.
 """
 
 from dataclasses import dataclass
-from typing import Dict, Any, Optional
+from typing import Dict, Any, cast, Optional, override
 from enum import Enum
 from ..core.printing import print_debug, print_info, print_warning
 
@@ -30,10 +30,19 @@ class Parameters(Dict[str, Any]):
             parameters: Optional dictionary of parameters
         """
         if parameters is None:
+            print_debug("Initializing Parameters with an empty dictionary.")
             parameters = {}
         super().__init__(parameters)
-        self.parameters = self  # Keep reference for existing code
     
+    def __repr__(self) -> str:
+        """Return a string representation of the Parameters object."""
+        return f"Parameters({dict(self)})"
+    
+    def __str__(self) -> str:
+        """Return a string representation of the Parameters object."""
+        return f"Parameters({dict(self)})"
+    
+    @override
     def get(self, name: str, default: Any = None, path: list[str] = []) -> Any:
         """
         Get the value of a parameter by its name with a default value.
@@ -41,7 +50,8 @@ class Parameters(Dict[str, Any]):
         Args:
             name: The name of the parameter to retrieve.
             default: The default value to return if the parameter is not found.
-        
+            path: The path to the parameter in the nested dictionary.
+
         Returns:
             The value of the parameter or the default value if not found.
         """
@@ -51,7 +61,11 @@ class Parameters(Dict[str, Any]):
         def _get_recursive(d: Dict[str, Any], path: list[str]) -> Any:
             if not path:
                 print_debug(f"Returning parameter '{name}' with the value from {d}'")
-                return Dict.get(d, name, default) # type: ignore
+                try :
+                    return d[name]
+                except KeyError:
+                    print_warning(f"Parameter '{name}' not found in {d}, returning default value '{default}'")
+                    return default 
             key = path[0]
             print_debug(f"Checking path '{key}' in parameters")
 
@@ -62,7 +76,7 @@ class Parameters(Dict[str, Any]):
             else:
                 return _get_recursive(d[key], path[1:])
 
-        return _get_recursive(self.parameters, path)
+        return _get_recursive(self, path)
 
     def set(self, name: str, value: Any, path: list[str] = []) -> None:
         """
@@ -75,6 +89,7 @@ class Parameters(Dict[str, Any]):
         if not isinstance(value, (str, int, float, bool, list, dict)):
             raise ValueError(f"Unsupported type for parameter '{name}': {type(value)}")
         print_debug(f"Setting parameter '{name}' to '{value}' with path '{path}'")
+        
         def _set_recursive(d: Dict[str, Any], path: list[str]) -> None:
             if not path:
                 d[name] = value
@@ -95,7 +110,29 @@ class Parameters(Dict[str, Any]):
             else:
                 _set_recursive(d[key], path[1:])
             
-        _set_recursive(self.parameters, path)
+        _set_recursive(self, path)
+    
+    def flatten(self) -> Dict[str, Any]:
+        """
+        Flatten the parameters dictionary to a single level.
+        
+        Returns:
+            A flattened dictionary with all parameters.
+        """
+        print_debug("Flattening parameters dictionary")
+        flat_params: Parameters = Parameters({})
+
+        def _flatten(d: Dict[str, Any], parent_key: str = '') -> None:
+            for k, v in d.items():
+                new_key = f"{parent_key}.{k}" if parent_key else k
+                if isinstance(v, dict):
+                    v_str_dict = cast(Dict[str, Any], v)
+                    _flatten(v_str_dict, new_key)
+                else:
+                    flat_params[new_key] = v
+
+        _flatten(self)
+        return flat_params
 
 @dataclass
 class Config:
@@ -105,7 +142,7 @@ class Config:
     parameters: Parameters
 
 
-def UpdateConfig(config: Config, args: Parameters) -> None:
+def UpdateDefaultConfigFromCLIArgs(config: Config, args: Parameters) -> None:
     """
     Convert command line parameters to a Config object.
     
@@ -115,9 +152,9 @@ def UpdateConfig(config: Config, args: Parameters) -> None:
     Returns:
         Config: Config object with the provided parameters
     """
-    print_debug(f"Converting command line parameters to Config: {args}")
+    print_info(f"Converting command line parameters to Config: {args}")
 
-    parameters = config.parameters
+    parameters : Parameters = config.parameters
 
     for key, value in args.items():
         match key:
@@ -140,6 +177,26 @@ def UpdateConfig(config: Config, args: Parameters) -> None:
                     case _ :
                         print_warning(f"Unknown mode '{value}', default parameters will be used.")
                         pass
+            case "attack":
+                # Set the attack mode
+                    print_debug(f"Setting attack mode to {value}")
+                    parameters.set("attack", value, ["app", "enabled"])
+            case "lab":
+                # Set the lab mode
+                print_debug(f"Setting lab mode to {value}")
+                parameters.set("lab", value, ["app", "enabled"])
+            case "metrics":
+                # Set the metrics mode
+                print_debug(f"Setting metrics mode to {value}")
+                parameters.set("metrics", value, ["app", "enabled"])
+            case "defense":
+                # Set the defense mode
+                print_debug(f"Setting defense mode to {value}")
+                parameters.set("defense", value, ["app", "enabled"])
+            case "gui":
+                # Set the GUI mode
+                print_debug(f"Setting GUI mode to {value}")
+                parameters.set("gui", value, ["app", "enabled"])
             case "verbosity":
                 # Set the verbosity level
                 print_info(f"Setting verbosity level to '{value}'")
@@ -158,8 +215,10 @@ def UpdateConfig(config: Config, args: Parameters) -> None:
                 parameters.set("target_port", value, ["attack"])
             case "attack_name":
                 # Set the attack name
-                print_debug(f"Setting attack name to '{value}'")
+                print_debug(f"Setting attack name to '{value}' and enabling attack mode")
                 parameters.set("attack_name", value, ["attack"])
+                parameters.set("attack", True, ["app", "enabled"])
+
             case "spoofing_enabled":
                 # Set spoofing enabled/disabled
                 print_debug(f"Setting spoofing enabled to '{value}'")
@@ -191,8 +250,15 @@ def UpdateConfig(config: Config, args: Parameters) -> None:
                 pass
             
             case _:
-                print_debug(f"Setting custom parameter '{key}' to '{value}'")
-                parameters.set(key, value, ["custom"])
+                if value is not None:
+                    # Set custom parameters
+                    if isinstance(value, str):
+                        print_debug(f"Setting custom parameter '{key}' to '{value}'")
+                        parameters.set(key, value, ["custom"])
+                    else:
+                        print_warning(f"Unsupported type for custom parameter '{key}': {type(value)}")
+                else:
+                    print_warning(f"Skipping parameter '{key}' because its value is None")
 
     config.parameters = parameters
     print_debug(f"Updated config parameters: {config.parameters}")

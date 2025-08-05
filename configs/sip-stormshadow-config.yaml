@@ -7,7 +7,7 @@
 app:
   platform: "linux"
   project_name: "StormShadow"
-  version: "0.1.0"
+  version: "0.2.0"
   description: "StormShadow for Spoofed SIP Attacks"
   # Enable or disable features globally
 
@@ -45,7 +45,7 @@ network:
   # Network interface to use by default
   interface: "auto" # Automatically determine the interface from the network configuration
   own_ip: "auto"  # Automatically determine the own IP address from the network configuration
-  first_return_queue_num: "auto"  # Automatically determine the queue number for ACK return
+  first_queue_num: "auto"  # Automatically determine the queue number for ACK return
   # SIP configuration
   sip_port: 5060
 
@@ -64,17 +64,20 @@ attack:
   target_port: "auto"  # Automatically determine the target port (use the sip port)
   source_port: "auto"  # Automatically determine the source port (use the ack port)
   attack_queue_num: "auto"  # Automatically determine the queue number for the attack
-    
-  count: 1000 # Number of SIP INVITE messages to send, put 0 for unlimited
+
+  max_count: 1000 # Number of SIP INVITE messages to send, put 0 for unlimited
   delay: 0.01 # Delay between each invites put 0 for maximum speed
   max_duration: 60  # Maximum duration of the attack in seconds put 0 for unlimited
-  sip_user: "200"
+  rate : 100  # Rate of SIP INVITE messages per second
+  sip_users :
+    - "200"
+    - "201"
+    - "202"
 
   spoofing_subnet: "10.10.123.0/25"
   user_agent: "StormShadow"  # Custom user-agent
   # Path to custom payload, if needed put a "payload.sip" file for full customization
   custom_payload_path: "sip-attacks/custom_payloads/custom_payload_config.yaml"
-
 # Lab (victim) configuration
 lab:
   interface: "auto" # Use "auto" to automatically determine the interface from the network configuration

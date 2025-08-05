@@ -112,6 +112,17 @@ def print_debug(message: Any, **kwargs: Any) -> None:
     colored_message = _colorize(f"🐛 {message}", Colors.MAGENTA)
     print(colored_message, **kwargs)
 
+def print_in_dev(message: Any, **kwargs: Any) -> None:
+    """
+    Print a message indicating that the feature is not available in the current environment.
+
+    Args:
+        message: Message to print
+        **kwargs: Additional arguments for print()
+    """
+    colored_message = _colorize(f"== NOT AVAILABLE IN DEV ==\n⚠ {message}\n" + "="*30, Colors.YELLOW)
+    colored_message = f"{Colors.YELLOW}{Colors.BOLD}{colored_message}{Colors.END}"
+    print(colored_message, file=sys.stderr, **kwargs)
 
 def print_header(message: Any, **kwargs: Any) -> None:
     """

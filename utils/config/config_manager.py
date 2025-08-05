@@ -11,11 +11,11 @@ import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-from utils_old.core.printing import print_debug, print_warning
+from ..core.printing import print_debug, print_success, print_warning
 
 from ..core.system_utils import get_interface, get_interface_ip, check_current_queue_num
 
-from .config import Config, ConfigType, Parameters
+from .config import Config, ConfigType, Parameters, UpdateDefaultConfigFromCLIArgs
 
 
 class ConfigManager:
@@ -24,14 +24,15 @@ class ConfigManager:
     If no config path is provided, it defaults to the standard configuration file.
     If a config path is provided, it uses that path to load the configuration.
     """
-    def __init__(self, config_path: Optional[Path]=None) -> None:
-        if config_path is None:
+    def __init__(self, CLI_Args: Optional[Parameters] = None, default_config_path: Optional[Path]=None) -> None:
+        if default_config_path is None:
             self.config_file_path = Path(__file__).resolve().parents[2]/ "configs" / "sip-stormshadow-config.yaml"
         else:
-            self.config_file_path = config_path
+            self.config_file_path = default_config_path
 
         if not self.config_file_path.exists():
             raise FileNotFoundError(f"Config file not found: {self.config_file_path}")
+        print_debug(f"Default Config file path: {self.config_file_path}")
 
         # Contain the shared configuration for every parts of the application
         self.app_config: Config
@@ -49,8 +50,18 @@ class ConfigManager:
         self.custom_configs: Config
         # Load the default configuration file
         default_config = self._load_default_config_file()
+        # If CLI arguments are provided, update the default configuration
+        print_debug(f"Show default configuration file : {default_config}")
+        if CLI_Args:
+            print_debug(f"Updating default configuration with CLI arguments: {CLI_Args}")
+            UpdateDefaultConfigFromCLIArgs(default_config, CLI_Args)
+            print_success("Default configuration updated with CLI arguments.")
+        else:
+            print_debug("No CLI arguments provided, using default configuration.")
+            print_warning("No CLI arguments provided, using default configuration.")
         # Load all configurations
         self._load_all_configs(default_config)
+        print_success("Configuration manager initialized successfully.")
 
     def _load_all_configs(self, default_config: Config) -> None:
         # Use the default configuration file
@@ -74,10 +85,14 @@ class ConfigManager:
 
         with open(default_config_path, "r") as f:
             yaml_content: Dict[str, Any] = yaml.safe_load(f)
-
+        
+        print_debug(f"Default configuration loaded from {default_config_path}")
+        parameters=Parameters(yaml_content)
+        print_debug(f"Default configuration parameters: {parameters}")
+        
         default_config = Config(
             config_type=ConfigType.DEFAULT,
-            parameters=Parameters(yaml_content)
+            parameters=parameters
         )
 
         return default_config
@@ -90,8 +105,11 @@ class ConfigManager:
             ["attack", "target_port"],
             ["attack", "source_port"],
             ["attack", "attack_queue_num"],
-            ["metrics", "source_port"],
+            ["attack", "interface"],
+            ["network", "interface"],
+            ["network", "own_ip"],
             ["metrics", "ack_port"],
+            ["metrics", "ack_return_queue_num"],
             ["lab", "interface"],
             ["lab", "server_ip"],
             ["lab", "return_path", "dnat_target_ip"],
@@ -104,24 +122,25 @@ class ConfigManager:
         default_ack_port = parameters.get("ack_port", 4000, ["metrics"])
         default_interface = parameters.get("interface", "auto", ["network"])
         default_ip = parameters.get("own_ip", "auto", ["network"])
-        first_return_queue_num = parameters.get("first_return_queue_num", "auto", ["network"])
+        first_queue_num = parameters.get("first_queue_num", "auto", ["network"])
 
         # Check if the interface is set, if not, use the default one
         if default_interface == "auto":
             default_interface = get_interface()
+            print_debug(f"Using default interface: {default_interface}")
         # Check if the IP is set, if not, use the default one
         if default_ip == "auto":
             default_ip = get_interface_ip(default_interface)
         # Check if the first return queue number is set, if not, use the default one
-        if first_return_queue_num == "auto":
-            first_return_queue_num = check_current_queue_num()
+        if first_queue_num == "auto":
+            first_queue_num = check_current_queue_num()
         
         # Resolve auto configurations
         for path in auto_to_resolve:
             k = path[-1]
             # v = find_value_by_path(parameters, path)
             v = parameters.get(k, "auto", path[:-1])
-            if v == "auto" or v == {}:
+            if v == "auto":
                 value = None
                 # Resolve the auto value based on the context
                 match k:
@@ -135,10 +154,14 @@ class ConfigManager:
                         # Use the ack port from metrics config
                         value = default_ack_port
                     case "attack_queue_num":
-                        # No explicit value, leave as is or set to None
-                        value = None
+                        # Use the first available queue number for the attack
+                        value = first_queue_num
+                    case "ack_return_queue_num":
+                        # Increment the first queue number for ACK return
+                        value = first_queue_num + 1 
                     case "interface":
                         # Use the interface from network config
+                        print_debug(f"Using interface: {default_interface}")
                         value = default_interface
                     case "server_ip":
                         # Use the interface from network config (simulate IP from interface)
@@ -151,95 +174,136 @@ class ConfigManager:
                         value = default_sip_port
                     case "spoofed_subnet":
                         # Use the attack spoofing subnet
-                        value = parameters.get("attack", {}).get("spoofing_subnet", "10.10.123.0/25")
+                        value = parameters.get("spoofing_subnet", "10.10.123.0/25", ["attack"])
                     case _ : pass  # No specific action for other keys
                 # If a value is resolved, set it in the parameters
                 if value is not None:
                     # Set the resolved value in the parameters
                     parameters.set(k, value, path[:-1])
-
+        print_debug(f"Resolved parameters: {parameters}")
         return Config(
             config_type=ConfigType.DEFAULT,
             parameters=parameters
         )
 
     def _load_app_config(self, default_config: Config) -> None:
-        parameters = default_config.parameters.get("app", {})
-        if not parameters:
+        parameters : Dict[str, Any] = default_config.parameters["app"] if "app" in default_config.parameters else {}
+        if parameters == {}:
             raise ValueError("App configuration is missing in the default config.")
+        
         self.app_config = Config(
             config_type=ConfigType.APP,
-            parameters=parameters
+            parameters=Parameters(parameters)
         )
 
     def _load_attack_config(self, default_config: Config) -> None:
-        attack_parameters = default_config.parameters.get("attack", {})
+        attack_parameters : Dict[str, Any]= default_config.parameters["attack"] if "attack" in default_config.parameters else {}
 
         if not attack_parameters:
             raise ValueError("Attack configuration is missing in the default config.")
 
         self.attack_config = Config(
             config_type=ConfigType.ATTACK,
-            parameters=attack_parameters
+            parameters=Parameters(attack_parameters)
         )
 
     def _load_lab_config(self, default_config: Config) -> None:
-        lab_parameters = default_config.parameters.get("lab", {})
+        lab_parameters : Dict[str, Any] = default_config.parameters["lab"] if "lab" in default_config.parameters else {}
+
         if not lab_parameters:
             raise ValueError("Lab configuration is missing in the default config.")
 
         self.lab_config = Config(
             config_type=ConfigType.LAB,
-            parameters=lab_parameters
+            parameters=Parameters(lab_parameters)
         )
 
     def _load_metrics_config(self, default_config: Config) -> None:
-        metrics_parameters = default_config.parameters.get("metrics", {})
+        metrics_parameters : Dict[str, Any] = default_config.parameters["metrics"] if "metrics" in default_config.parameters else {}
         if not metrics_parameters:
             raise ValueError("Metrics configuration is missing in the default config.")
 
         self.metrics_config = Config(
             config_type=ConfigType.METRICS,
-            parameters=metrics_parameters
+            parameters=Parameters(metrics_parameters)
         )
 
     def _load_defense_config(self, default_config: Config) -> None:
 
         try:
-            defense_parameters = default_config.parameters.get("defense", {})
+            defense_parameters : Dict[str, Any] = default_config.parameters["defense"] if "defense" in default_config.parameters else {}
             if not defense_parameters:
                 raise ValueError("Defense configuration is missing in the default config.")
 
         except Exception as e:
             print_warning(f"No defense implementation for now: {e}")
-            defense_parameters = Parameters()
+            defense_parameters = {}
 
         self.defense_config = Config(
             config_type=ConfigType.DEFENSE,
-            parameters=defense_parameters
+            parameters=Parameters(defense_parameters)
         )
 
     def _load_gui_config(self, default_config: Config) -> None:
-        gui_parameters = default_config.parameters.get("gui", {})
+        gui_parameters : Dict[str, Any] = default_config.parameters["gui"] if "gui" in default_config.parameters else {}
         if not gui_parameters:
             raise ValueError("GUI configuration is missing in the default config.")
 
         self.gui_config = Config(
             config_type=ConfigType.GUI,
-            parameters=gui_parameters
+            parameters=Parameters(gui_parameters)
         )
 
     def _load_custom_configs(self, default_config: Config) -> None:
-        custom_parameters = default_config.parameters.get("custom", {})
-
+        custom_parameters : Dict[str, Any] = default_config.parameters["custom"] if "custom" in default_config.parameters else {}
         if not custom_parameters:
             print_debug("No custom configurations found, using empty config.")
-            custom_parameters = Parameters()
+            custom_parameters = {}
 
         self.custom_configs = Config(
-                config_type=ConfigType.CUSTOM,
-                parameters=custom_parameters
-            )
+            config_type=ConfigType.CUSTOM,
+            parameters=Parameters(custom_parameters)
+        )
+
+    def reload_configs(self) -> None:
+        """
+        Reload all configurations from the default config file.
+        This is useful if the configuration file has been modified.
+        """
+        print_debug("Reloading configurations...")
+        default_config = self._load_default_config_file()
+        self._load_all_configs(default_config)
+        print_success("Configurations reloaded successfully.")
+
+    def reload_configs_from_file(self, config_path: Path) -> None:
+        """
+        Load a configuration from a specific file path.
+        The configuration must implement the DEFAULT type.
+        
+        Args:
+            config_path (Path): Path to the configuration file
+        
+        Returns:
+            Config: Loaded configuration
+        """
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config file not found: {config_path}")
+
+        with open(config_path, "r") as f:
+            yaml_content: Dict[str, Any] = yaml.safe_load(f)
+
+        if not yaml_content or "app" not in yaml_content:
+            raise ValueError("Invalid configuration file.")
+
+        new_default_config = Config(
+            config_type=ConfigType.DEFAULT,
+            parameters=Parameters(yaml_content)
+        )
+
+        # Reload all configurations based on the new default config
+        self._load_all_configs(new_default_config)
+
+        return None
 
     def get_all_configs(self) -> Dict[ConfigType, Config]:
         """
@@ -285,5 +349,10 @@ class ConfigManager:
                 return self.gui_config
             case ConfigType.CUSTOM:
                 return self.custom_configs
+            case ConfigType.DEFAULT:
+                return Config(
+                    config_type=ConfigType.DEFAULT,
+                    parameters=self._load_default_config_file().parameters
+                )
             case _:
                 raise ValueError(f"Unknown configuration type: {config_type}")

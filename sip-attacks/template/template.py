@@ -1,29 +1,20 @@
-"""
-InviteFlood Attack Module.
 
-Implements SIP INVITE flood attacks using the inviteflood tool.
-This module integrates with the StormShadow orchestrator architecture.
-"""
 
-from pathlib import Path
 from typing import List, Optional
+from pathlib import Path
 from utils.attack.attack_enums import AttackProtocol, AttackType
 from utils.core.printing import print_info
 from utils.interfaces.attack_interface import AttackInterface
+
 from utils.registry.metadata import ModuleInfo
 
-
-class InviteFloodAttack(AttackInterface):
-    """
-    SIP INVITE Flood Attack Module.
-    This module implements a SIP INVITE flood attack using the inviteflood tool.
-    """
+class TemplateAttack(AttackInterface):
     # Module information for the registry
     infos : ModuleInfo  = ModuleInfo(
-        description="SIP INVITE Flood Attack Module using inviteflood tool",
+        description="StormShadow Template Attack Module",
         version="1.0.0",
-        author="Corentin COUSTY",
-        requirements=["inviteflood"],
+        author="StormShadow",
+        requirements=[],
         license="Educational Use Only"
     )
 
@@ -59,38 +50,36 @@ class InviteFloodAttack(AttackInterface):
             custom_payload_path=custom_payload_path,
             sip_users=sip_users
         )
-        self.attack_type = AttackType.DDOS  # Set a specific attack type for this template
-        self.attack_protocol = AttackProtocol.SIP  # Set a specific protocol for this template
-        self.name = "InviteFloodAttack"
+        self.attack_type = AttackType.TEMPLATE  # Set a specific attack type for this template
+        self.attack_protocol = AttackProtocol.TEMPLATE  # Set a specific protocol for this template
+        self.name = "TemplateAttack"
         self.dry_run_implemented = True  # Indicate that dry-run is implemented for this attack
         self.resume_implemented = True  # Indicate that resume is implemented for this
         self.debug_parameters()
         # Print the initialization message
-
-        print_info(f"InviteFlood attack initialized with target: {target_ip}:{target_port}")
+        print_info(f"Template attack initialized with target: {target_ip}:{target_port}")
 
     def cleanup(self) -> None:
-        print_info("Cleaning up InviteFlood attack resources")
+        print_info("Cleaning up template attack resources")
         # Implement any necessary cleanup logic here
     
     def end(self):
-        print_info("Ending the InviteFlood attack")
-        print_info("Cleaning up resources used by the InviteFlood attack")
+        print_info("Ending the template attack")
+        print_info("Cleaning up resources used by the template attack")
         self.cleanup()
 
     def run(self) -> None:
-        print_info("Running InviteFlood attack")
+        print_info("Running template attack")
         # Implement the attack logic here
 
     def stop(self) -> None:
-        print_info("Stopping InviteFlood attack")
+        print_info("Stopping template attack")
         print_info("Ending the attack and cleanup resources by default")
         self.end()
     
     def get_attack_description(self) -> str:
-        return "This is a InviteFlood attack module for demonstration purposes." \
+        return "This is a template attack module for demonstration purposes." \
         "It can be extended to implement specific attack logic." \
         "It inherits from AttackInterface and implements the required methods."
     
     
-

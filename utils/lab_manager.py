@@ -5,8 +5,8 @@ This module provides centralized attack lifecycle management by directly
 working with attack modules and a simple discovery mechanism.
 """
 
-from core.printing import print_info
-from config.config import Config
+from .core.printing import print_info
+from .config.config import Config
 
 class LabManager:
     """

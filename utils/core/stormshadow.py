@@ -3,13 +3,16 @@
 """StormShadow core orchestrator module.
 This module serves as the main entry point for the StormShadow application,
 handling the initialization and orchestration of various components.
+It manages configuration, attack modules, and lab modules, providing a unified interface for the application.
+Author: Corentin COUSTY
 """
 
+from pathlib import Path
 from typing import Optional
-from config.config import Config, ConfigType, Parameters
-from utils.attack_manager import AttackManager
+from ..config.config import Config, ConfigType, Parameters
+from utils.attack.attack_manager import AttackManager
 from utils.config.config_manager import ConfigManager
-from printing import print_info, print_warning, print_error, print_success, print_debug
+from .printing import print_info, print_warning, print_error, print_success, print_debug
 from utils.lab_manager import LabManager
 
 class StormShadow:
@@ -17,15 +20,19 @@ class StormShadow:
     Main class for the StormShadow application.
     """
 
-    def __init__(self):
+    def __init__(self, CLI_Args: Parameters, default_config_path: Optional[Path] = None) -> None:
 
-        self.configManager = ConfigManager()
-
+        print_info("Initializing StormShadow...")
+        # Initialize the configuration manager with CLI arguments and default config path
+        print_debug("Initializing ConfigManager with CLI arguments and default config path.")        
+        self.configManager = ConfigManager(CLI_Args=CLI_Args, default_config_path=default_config_path)
+        print_debug("ConfigManager initialized with CLI arguments and default config path.")
         # Load configurations
+        print_debug("Loading app configurations...")
         self.parameters : Parameters = self.configManager.get_config(ConfigType.APP).parameters
-
-        # If active, a simulation will be run instead of a real attack / lab
-        self.dry_run = self.parameters.get("dry_run", False, path=["app"])
+        print_debug("App configurations loaded successfully.")
+        # If active, a simulation will be run instead of a real attack / lab
+        self.dry_run = self.parameters.get("dry_run", False, path=["enabled"])
 
         if self.dry_run:
             print_warning("Dry run mode is enabled. No real attacks and no features will be executed.")
@@ -48,48 +55,14 @@ class StormShadow:
         self.gui_config : Config = self.configManager.get_config(ConfigType.GUI)
         self.custom_configs : Config = self.configManager.get_config(ConfigType.CUSTOM)
     
-    def update_config(self, config: Config) -> None:
-        """
-        Update the StormShadow configuration.
-        
-        Args:
-            config: New configuration to apply
-        """
-        self.configManager.update_config(config)
-        self.parameters = self.configManager.get_config(ConfigType.APP).parameters
 
-        # Reinitialize managers with new configuration
-        if self.attack_manager:
-            self.attack_manager.config = self.configManager.get_config(ConfigType.ATTACK)
-        
-        if self.lab_manager:
-            self.lab_manager.config = self.configManager.get_config(ConfigType.LAB)
-
-    def setup(self, command_config: Optional[Config] = None) -> None:
+    def setup(self) -> None:
         """
         Run the StormShadow application.
         """
-        print("Starting StormShadow...")
-        print_debug(f"Command configuration: {command_config}")
-
-        if command_config != None:
-            print_info("Running command with provided configuration...")
-            self.update_config(command_config)
-        else:
-            print_info("Running with default configuration...")
+        print_info("Starting StormShadow...")
 
         # Initialize managers based on configuration
-        if self.attack_on:
-            try:
-                print_debug("Attack mode is enabled, initializing attack manager...")
-                self.attack_manager = AttackManager(self.configManager.get_config(ConfigType.ATTACK))
-            except Exception as e:
-                print_error(f"Failed to initialize attack manager: {e}")
-                self.attack_manager = None
-        else:
-            print_debug("Attack mode is disabled.")
-            self.attack_manager = None
-        
         if self.lab_on:
             try :
                 print_debug("Lab mode is enabled, initializing lab manager...")
@@ -101,13 +74,26 @@ class StormShadow:
         else:
             print_debug("Lab mode is disabled.")
             self.lab_manager = None
+    
+        if self.attack_on:
+            try:
+                print_debug("Attack mode is enabled, initializing attack manager...")
+                attack_modules_path = Path("sip-attacks")
+                self.attack_manager = AttackManager(self.configManager.get_config(ConfigType.ATTACK), attack_modules_path)
+                print_success("Attack mode is enabled.")
+            except Exception as e:
+                print_error(f"Failed to initialize attack manager: {e}")
+                self.attack_manager = None
+        else:
+            print_debug("Attack mode is disabled.")
+            self.attack_manager = None
 
     def run(self) -> None:
         """
         Start the features of the StormShadow application.
         For CLI mode, this will start the main application loop.
         """
-        print("Starting features...")
+        print_info("Starting features...")
 
         if self.lab_on :
             if self.lab_manager:

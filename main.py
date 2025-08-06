@@ -18,7 +18,7 @@ import platform
 import argparse
 
 from utils.config.config import Parameters
-from utils.core.printing import print_info
+from utils.core.printing import print_in_dev, print_info
 from utils.core.stormshadow import StormShadow
 
 def print_banner() -> None:
@@ -53,6 +53,8 @@ Examples:
   # Run GUI
   python3 main.py --mode gui
 
+  # Run with venv
+  sudo /home/[username]/venvs/[venv_name]/bin/python3 main.py --mode attack --attack-name invite-flood
   # Use custom config
   python3 main.py --config attack-sip-config.yaml --mode attack
         """
@@ -85,7 +87,6 @@ Examples:
     parser.add_argument(
         "--verbosity", "-v",
         choices=["quiet", "info", "debug"],
-        default="info",
         help="Logging verbosity level"
     )
     parser.add_argument(
@@ -116,6 +117,16 @@ Examples:
         help="Enable/disable lab mode"
     )
     parser.add_argument(
+        "--keep-lab-open", "-klo",
+        action=argparse.BooleanOptionalAction,
+        help="Keep lab running in terminal even when main program exits"
+    )
+    parser.add_argument(
+        "--max_count", "-mc",
+        type=int,
+        help="Maximum number of attack packets"
+    )
+    parser.add_argument(
         "--metrics", "-mtr",
         action=argparse.BooleanOptionalAction,
         help="Enable/disable metrics mode"
@@ -137,7 +148,7 @@ Examples:
     )
     return parser
 
-def argToParameters(args: argparse.Namespace) -> Parameters:
+def argToParameters(args: argparse.Namespace, unknown_args: list[str]) -> Parameters:
     """
     Convert command line arguments to Parameters object.
 
@@ -151,6 +162,23 @@ def argToParameters(args: argparse.Namespace) -> Parameters:
 
     parameters = Parameters()
 
+    # Add unknown args as key-value pairs to params
+    i = 0
+    while i < len(unknown_args):
+        key = unknown_args[i]
+        if key.startswith('--'):
+            key = key[2:]
+        elif key.startswith('-'):
+            key = key[1:]
+        # Check if next item is a value or another flag
+        if i + 1 < len(unknown_args) and not unknown_args[i + 1].startswith('-'):
+            value = unknown_args[i + 1]
+            i += 2
+        else:
+            value = True  # flag with no value
+            i += 1
+        parameters.set(key.replace('-', '_'), value)
+
     for key, value in vars(args).items():
         if value is not None:
             parameters.set(key, value)
@@ -163,16 +191,17 @@ def main() -> int:
 
     # Create argument parser
     parser = create_argument_parser()
-    args : argparse.Namespace = parser.parse_args()
-
+    args, unknown_args = parser.parse_known_args()
+    print_in_dev(f"Parsed args: {args}")
     # Transform CLI args to Parameters
     # params : Parameters = Parameters(vars(args)) # Put None values to every non provided argument
 
-    params : Parameters = argToParameters(args)
+    params : Parameters = argToParameters(args, unknown_args)
     stormshadow = StormShadow(CLI_Args=params, default_config_path=args.config)
 
     stormshadow.setup()
     stormshadow.run()
+    stormshadow.stop()
 
     return 0
 

@@ -47,8 +47,11 @@ class AttackInterface(ABC):
         self.delay : float = delay # Delay between requests in seconds
         self.sip_users : List[int] = sip_users # List of SIP users to target
         self.dry_run : bool = False  # Whether to run the attack in dry-run mode
+
         self.dry_run_implemented : bool = False  # Whether dry-run is implemented in the attack module
         self.resume_implemented : bool = False  # Whether resume is implemented in the attack module
+        self.spoofing_implemented : bool = False  # Whether spoofing is implemented in the attack module
+
         self.interface : str = interface  # Network interface to use
         self.source_port : int = source_port  # Source port for the attack
         self.attack_queue_num : int = attack_queue_num  # Queue number for the attack
@@ -80,7 +83,7 @@ class AttackInterface(ABC):
         """End the attack (default behavior: call cleanup)"""
         print(f"[INFO] Ending attack on {self.target_ip}")
         self.cleanup()
-        
+
     @abstractmethod
     def cleanup(self):
         """Default cleanup (optional override)"""
@@ -90,7 +93,7 @@ class AttackInterface(ABC):
     def get_attack_description(self) -> str:
         """Return a description of the attack"""
         pass
-    
+
     def load_config(self, params: Parameters):
         """Load parameters for the attack"""
         print("[INFO] Loading parameters for SIP attack")
@@ -98,7 +101,7 @@ class AttackInterface(ABC):
         self.target_port = params.get("target_port", self.target_port)
         self.rate = params.get("rate", self.rate)
         self.delay = params.get("delay", self.delay)
-        
+
         # Handle sip_user (string) or sip_users (list)
         if "sip_user" in params:
             sip_user = params.get("sip_user")
@@ -108,7 +111,7 @@ class AttackInterface(ABC):
                 self.sip_users = [sip_user]
         else:
             self.sip_users = params.get("sip_users", self.sip_users)
-    
+
     def get_attack_type(self) -> AttackType:
         """Return the type of attack"""
         return self.attack_type
@@ -124,6 +127,26 @@ class AttackInterface(ABC):
         for key, value in self.__dict__.items():
             print_debug(f"  {key}: {value}")
 
+    def start_spoofing(self) -> bool:
+        """
+        Implement spoofing logic for the attack if needed.
+        
+        Returns:
+            bool: True if spoofing is successfully set up, False otherwise.
+        """
+        print_warning("Spoofing not implemented in this attack module.")
+        return False
+    
+    def stop_spoofing(self) -> bool:
+        """
+        Stop spoofing if it is implemented in the attack module.
+        
+        Returns:
+            bool: True if spoofing was stopped successfully, False otherwise.
+        """
+        print_warning("Stopping spoofing not implemented in this attack module.")
+        return False
+
 def get_init_args(cls : Type[AttackInterface]) -> List[str]:
     signature = inspect.signature(cls.__init__)
     # Exclude 'self' and get argument names
@@ -135,7 +158,7 @@ def create_attack_instance(
 ) -> AttackInterface:
     """
     Create an instance of the attack class with the given arguments.
-    
+
     Args:
         attack_class: The attack class to instantiate.
         params: Parameters to pass to the attack class constructor.

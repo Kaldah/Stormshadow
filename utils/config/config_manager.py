@@ -11,12 +11,20 @@ import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional
 
+from utils.network.iptables import get_current_iptables_queue_num
+
 from ..core.printing import print_debug, print_success, print_warning
 
-from ..core.system_utils import get_interface, get_interface_ip, check_current_queue_num
+from ..core.system_utils import get_interface, get_interface_ip
 
 from .config import Config, ConfigType, Parameters, UpdateDefaultConfigFromCLIArgs
 
+def get_available_queue_num() -> int:
+    """
+    Placeholder function to check the current queue number.
+    This should be implemented to return the actual queue number of the machine.
+    """
+    return get_current_iptables_queue_num() + 1
 
 class ConfigManager:
     """
@@ -131,9 +139,6 @@ class ConfigManager:
         # Check if the IP is set, if not, use the default one
         if default_ip == "auto":
             default_ip = get_interface_ip(default_interface)
-        # Check if the first return queue number is set, if not, use the default one
-        if first_queue_num == "auto":
-            first_queue_num = check_current_queue_num()
         
         # Resolve auto configurations
         for path in auto_to_resolve:
@@ -155,10 +160,10 @@ class ConfigManager:
                         value = default_ack_port
                     case "attack_queue_num":
                         # Use the first available queue number for the attack
-                        value = first_queue_num
+                        value = first_queue_num if first_queue_num != "auto" else get_available_queue_num() 
                     case "ack_return_queue_num":
                         # Increment the first queue number for ACK return
-                        value = first_queue_num + 1 
+                        value = first_queue_num if first_queue_num != "auto" else get_available_queue_num()
                     case "interface":
                         # Use the interface from network config
                         print_debug(f"Using interface: {default_interface}")

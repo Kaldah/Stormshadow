@@ -4,7 +4,7 @@ from types import ModuleType
 from typing import Optional, Type
 
 from utils.config.config import Parameters
-from utils.core.printing import print_debug, print_error, print_info, print_success, print_warning
+from utils.core.printing import print_debug, print_error, print_in_dev, print_info, print_success, print_warning
 from utils.interfaces.attack_interface import AttackInterface, create_attack_instance
 from .attack_enums import AttackProtocol, AttackStatus, AttackType
 
@@ -33,16 +33,16 @@ class AttackSession:
     Base class for all attack modules.
     """
 
-    def __init__(self, name: str, main_attack: AttackInterface) -> None:
+    def __init__(self, name: str, main_attack: AttackInterface, enable_spoofing: bool) -> None:
         self.name = name
         self.protocol = AttackProtocol.SIP
 
         self.main_attack : AttackInterface = main_attack  # Instance of the attack interface
 
         self.status = AttackStatus.INITIALIZED  # Status of the attack module
-        self.own_spoofing = False  # Whether the attack module is already spoofing or not
- 
-        
+        self.own_spoofing = main_attack.spoofing_implemented  # Whether the attack module is already spoofing or not
+        self.enable_spoofing = enable_spoofing  # Whether spoofing is enabled or not
+
     def start(self) -> None:
         """
         Start the attack.
@@ -58,6 +58,10 @@ class AttackSession:
         print_info(f"Starting attack: {self.name}")
         self.status = AttackStatus.RUNNING
         # Implement logic to start the attack
+        print_in_dev(f"Spooging state is set to: {self.enable_spoofing}")
+        if self.enable_spoofing:
+            print_info("Spoofing is enabled, starting spoofing...")
+            self.main_attack.start_spoofing()
         self.main_attack.run()
         print_success(f"Attack {self.name} started successfully.")
 
@@ -78,6 +82,8 @@ class AttackSession:
             self.main_attack.stop()
             self.status = AttackStatus.STOPPED
             print_info(f"Attack {self.name} stopped successfully.")
+            if self.enable_spoofing:
+                self.main_attack.stop_spoofing()
         except Exception as e:
             print_error(f"Error stopping attack {self.name}: {e}")
 
@@ -107,7 +113,7 @@ class AttackSession:
             self.status = AttackStatus.FAILED
             print_error(f"Trying to clean up after failed resume of attack {self.name}.")
             self.main_attack.cleanup()
-
+    
     def cleanup(self) -> None:
         """
         Cleanup resources used by the attack.
@@ -143,6 +149,7 @@ def try_loading_main_attack(py_file: Path) -> Optional[Type[AttackInterface]]:
     Returns:
         An instance of the attack module.
     """
+    print_debug(f"Trying to load attack module from {py_file}")
     try:
         spec = spec_from_file_location("attack_module", str(py_file))
         if spec is None:
@@ -168,10 +175,11 @@ def try_loading_main_attack(py_file: Path) -> Optional[Type[AttackInterface]]:
         print_info(f"Successfully loaded attack module: {py_file}")
         return main_attack_class
 
-    except ImportError as e:
-        raise ImportError(f"Failed to import attack module from {py_file}") from e
+    except Exception as e:
+        print_debug(f"Failed to import attack module from {py_file} : {e}")
+        return None
 
-def build_attack_from_module(module: Path, attack_params: Parameters) -> Optional[AttackSession]:
+def build_attack_from_module(module: Path, attack_params: Parameters, enable_spoofing: bool) -> Optional[AttackSession]:
     """
     Build an attack instance from a module path.
     
@@ -197,11 +205,11 @@ def build_attack_from_module(module: Path, attack_params: Parameters) -> Optiona
     try:
         main_attack_class: Optional[Type[AttackInterface]] = None
         print_debug(f"Loading attack module from path: {module}")
+        print_debug(f"module contents: {list(module.glob('*.py'))}")
         for py_file in module.glob("*.py"):
             found_class = try_loading_main_attack(py_file)
             if found_class is None:
                 print_debug(f"No valid attack class found in {py_file}, skipping.")
-                continue
             else:
                 print_debug(f"Found valid attack class in {py_file}: {found_class.__name__}")
                 main_attack_class = found_class
@@ -215,7 +223,7 @@ def build_attack_from_module(module: Path, attack_params: Parameters) -> Optiona
         main_attack = create_attack_instance(main_attack_class, attack_params)
         
         # Create an instance of the attack session
-        attack_session = AttackSession(name=main_attack.attack_name, main_attack=main_attack)
+        attack_session = AttackSession(name=main_attack.attack_name, main_attack=main_attack, enable_spoofing=enable_spoofing)
         print_info(f"Attack session created successfully: {attack_session.get_name()}")
         return attack_session
     except ImportError as e:

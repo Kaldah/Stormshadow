@@ -4,6 +4,7 @@ It includes configuration types and data structures.
 """
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, Any, cast, Optional, override
 from enum import Enum
 from ..core.printing import print_debug, print_info, print_warning
@@ -32,6 +33,7 @@ class Parameters(Dict[str, Any]):
         if parameters is None:
             print_debug("Initializing Parameters with an empty dictionary.")
             parameters = {}
+        self.authorized_values = (str, int, float, bool, list, dict, Path)
         super().__init__(parameters)
     
     def __repr__(self) -> str:
@@ -86,7 +88,7 @@ class Parameters(Dict[str, Any]):
             name: The name of the parameter to set.
             value: The value to assign to the parameter.
         """
-        if not isinstance(value, (str, int, float, bool, list, dict)):
+        if not isinstance(value, self.authorized_values):
             raise ValueError(f"Unsupported type for parameter '{name}': {type(value)}")
         print_debug(f"Setting parameter '{name}' to '{value}' with path '{path}'")
         
@@ -98,7 +100,7 @@ class Parameters(Dict[str, Any]):
             key = path[0]
             
             if key not in d:
-                if len(path) > 1:
+                if len(path) > 0:
                     print_warning(f"Creating new path '{key}' in parameters because it does not exist.")
                     d[key] = {}
                 else:
@@ -106,10 +108,10 @@ class Parameters(Dict[str, Any]):
                     d[key] = value
                     return
             if len(path) == 1:
+                print_debug(f"Adding {name} with value {value}")
                 d[key][name] = value
             else:
                 _set_recursive(d[key], path[1:])
-            
         _set_recursive(self, path)
     
     def flatten(self) -> Dict[str, Any]:
@@ -252,7 +254,7 @@ def UpdateDefaultConfigFromCLIArgs(config: Config, args: Parameters) -> None:
             case _:
                 if value is not None:
                     # Set custom parameters
-                    if isinstance(value, str):
+                    if isinstance(value, parameters.authorized_values):
                         print_debug(f"Setting custom parameter '{key}' to '{value}'")
                         parameters.set(key, value, ["custom"])
                     else:

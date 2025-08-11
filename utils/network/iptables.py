@@ -4,7 +4,7 @@
 import subprocess
 
 from utils.core.printing import print_debug, print_warning
-from utils.core.command_runner import run_command
+from utils.core.command_runner import run_command_str
 
 def get_current_iptables_queue_num() -> int:
     """
@@ -13,7 +13,7 @@ def get_current_iptables_queue_num() -> int:
     command = "iptables -S | grep NFQUEUE"
     try:
         print_debug(f"Running command to check current queue number: {command}")
-        result = run_command(command, capture_output=True, check=True, sudo=True)
+        result = run_command_str(command, capture_output=True, check=True, want_sudo=True)
         lines = result.stdout.strip().split('\n')
         return max(int(line.split('--queue-num ')[1]) for line in lines if '--queue-num ' in line)
     except subprocess.CalledProcessError as e:
@@ -35,7 +35,7 @@ def create_matching_queue(queue_num: int, chain: str, dst_port: int) -> bool:
     command = f"sudo iptables -I {chain} -p udp --dport {dst_port} -j NFQUEUE --queue-num {queue_num}"
     try:
         print_debug(f"Creating matching queue with command: {command}")
-        run_command(command, capture_output=False, check=True, sudo=True)
+        run_command_str(command, capture_output=False, check=True, want_sudo=True)
     except subprocess.CalledProcessError as e:
         print_warning(f"Failed to create matching queue: {e}")
         return False
@@ -63,7 +63,7 @@ def activate_return_path(receiver_ip: str, receiver_port: int, spoofed_subnet: s
     try:
         command = f"sudo iptables -t nat -I OUTPUT -p udp {source_port} -d {spoofed_subnet} -j DNAT --to-destination {receiver_ip}:{receiver_port}"
         print_debug(f"Activating return path with command: {command}")
-        run_command(command, capture_output=False, check=True, sudo=True)
+        run_command_str(command, capture_output=False, check=True, want_sudo=True)
     except subprocess.CalledProcessError as e:
         print_warning(f"Failed to activate return path: {e}")
     
@@ -88,7 +88,7 @@ def deactivate_return_path(receiver_ip: str, receiver_port: int, spoofed_subnet:
     try:
         command = f"sudo iptables -t nat -D OUTPUT -p udp {source_port} -d {spoofed_subnet} -j DNAT --to-destination {receiver_ip}:{receiver_port}"
         print_debug(f"Deactivating return path with command: {command}")
-        run_command(command, capture_output=False, check=True, sudo=True)
+        run_command_str(command, capture_output=False, check=True, want_sudo=True)
         return True
     except subprocess.CalledProcessError as e:
         print_warning(f"Failed to deactivate return path: {e}")

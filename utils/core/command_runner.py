@@ -1,167 +1,221 @@
-"""
-Command runner utilities for StormShadow.
-
-This module provides utilities for executing shell commands safely.
-"""
-
-import logging
 import os
+import sys
+import shutil
+import shlex
 import subprocess
-from typing import Dict, Optional
-from subprocess import CalledProcessError, CompletedProcess, Popen, run
+from typing import List, Optional, Dict, Sequence
+from utils.core.printing import print_debug, print_in_dev, print_warning
 
-from utils.core.printing import print_debug, print_in_dev
-from utils.core.system_utils import check_root
-
-def get_python_launcher(sudo: bool) -> str:
-    """
-    Get the Python launcher command based on the current environment.
-    
-    Returns:
-        str: The command to launch Python.
-    """
-    if sudo and check_root():
-        sudo_option = "| grep sudo"
-    else:
-        sudo_option = ""
-    command = f"ps -eo pid,ppid,cmd | grep python {sudo_option} | grep main.py"
-    # Use subprocess to run the command and capture the output
-    # This will return the command used to launch the main.py script
-    # We assume the first line of output contains the command we want
-
-    try:
-        print_in_dev(f"Running command to get Python launcher: {command}")
-        result = run(command, shell=True, capture_output=True, text=True, check=True)
-        lines = result.stdout.strip().split('\n')
-        print_in_dev(f"Output from command to get Python launcher: {lines}")
-        if lines:
-            if lines[0].split()[2] == "sudo":  # Extract the command part
-                # If the command was run with sudo, we include it in the launcher
-                return lines[0].split()[2] + " " + lines[0].split()[3]
-            else:
-                return lines[0].split()[2]  # Extract the command part
-        else:
-            logging.error("No output from command to get Python launcher.")
-            return "python3"
-    except Exception as e:
-        logging.error(f"Error occurred while getting Python launcher: {e}")
-        return "python3"
-
+def _prefix_sudo_argv(argv: List[str],
+                      want_sudo: bool,
+                      non_interactive: bool = True,
+                      preserve_env: bool = False) -> List[str]:
+    """Prefix argv with sudo when requested & available; never double-add."""
+    if not want_sudo or os.geteuid() == 0:
+        return argv
+    sudo_path = shutil.which("sudo")
+    if not sudo_path:
+        print_warning("sudo requested but not available; running without sudo")
+        return argv
+    sudo_argv = [sudo_path]
+    if non_interactive:
+        sudo_argv.append("-n")
+    if preserve_env:
+        sudo_argv.append("-E")
+    return sudo_argv + argv
 
 def run_command(
-    command: str,
+    argv: List[str],
+    *,
+    cwd: Optional[str] = None,
+    env: Optional[Dict[str, str]] = None,
+    want_sudo: bool = False,
+    sudo_non_interactive: bool = True,
+    sudo_preserve_env: bool = False,
     capture_output: bool = True,
     check: bool = True,
-    cwd: Optional[str] = None,
-    env: Optional[Dict[str, str]] = None,
-    sudo: bool = False
-) -> CompletedProcess[str]:
+    text: bool = True,
+) -> subprocess.CompletedProcess[str]:
     """
-    Run a shell command and return the completed process.
+    Run a command as a list of arguments and return a CompletedProcess result.
 
+    Features:
+    - **No shell**: arguments are passed directly to the OS, avoiding shell injection risks.
+    - **Automatic sudo support**: if `want_sudo=True` and the current user is not root,
+      the command is automatically prefixed with `sudo` (if available).
+        * If `sudo_non_interactive=True`, adds `-n` to avoid hanging for a password prompt.
+        * If `sudo_preserve_env=True`, adds `-E` to preserve the current environment under sudo.
+    - **Environment control**: you can override `cwd` (working directory) and `env` (environment variables).
+    - **Output capture**: by default, both stdout and stderr are captured (`capture_output=True`),
+      and the output is decoded to text strings (`text=True`).
+    - **Error handling**: if `check=True`, raises `subprocess.CalledProcessError` when the
+      command exits with a non-zero status; otherwise, returns the CompletedProcess object
+      without raising.
+    
     Args:
-        command (Union[str, List[str]]): The command to run.
-        capture_output (bool): Whether to capture stdout and stderr.
-        check (bool): Whether to raise an error on non-zero exit status.
-        cwd (Optional[str]): The working directory to run the command in.
-        env (Optional[dict]): Environment variables to set for the command.
+        argv: List of program arguments, e.g. `["ls", "-l"]`.
+        cwd: Optional working directory to run the command in.
+        env: Optional dict of environment variables to pass to the command.
+        want_sudo: Whether to prefix the command with sudo when not root.
+        sudo_non_interactive: If True, pass `-n` to sudo to fail fast if a password is required.
+        sudo_preserve_env: If True, pass `-E` to sudo to keep the current environment.
+        capture_output: If True, capture stdout and stderr into the CompletedProcess object.
+        check: If True, raise an exception if the command returns a non-zero exit code.
+        text: If True, decode stdout/stderr to str; if False, return bytes.
 
     Returns:
-        CompletedProcess: The result of the executed command.
+        subprocess.CompletedProcess: The result object with attributes:
+            - `args`: The command arguments.
+            - `returncode`: The exit status.
+            - `stdout`: Captured standard output (if `capture_output=True`).
+            - `stderr`: Captured standard error (if `capture_output=True`).
+
+    Raises:
+        subprocess.CalledProcessError: If `check=True` and the command fails.
+        RuntimeError: If `want_sudo=True` but sudo is requested/required and not available.
     """
-
-    if sudo:
-        try:
-            sudo_prefix = "sudo " * check_root()  # Ensure the function is called with root privileges
-        except Exception as e:
-            sudo_prefix = ""
-        command = sudo_prefix + command 
-
-    try:
-        print_debug(f"Trying to run : {command}")
-        result = run(
-            command,
-            shell=True,
-            capture_output=capture_output,
-            check=check,
-            cwd=cwd,
-            env=env,
-            text=True
-        )
-        return result
-    except CalledProcessError as e:
-        logging.error(f"Command '{e.cmd}' failed with exit code {e.returncode}")
-        logging.error(f"Output: {e.output}")
-        logging.error(f"Error: {e.stderr}")
-        raise
-    except Exception as e:
-        logging.error(f"An unexpected error occurred while running command '{command}': {e}")
-        raise
-
-def run_process(command: str,
-    cwd: Optional[str] = None,
-    env: Optional[Dict[str, str]] = None,
-    sudo: bool = False,
-    keep_alive: bool = False,
-    new_terminal: bool = False) -> Popen[bytes]:
-
-    """
-    Run a shell command in a real terminal (PTY).
-    Args:
-        command (str): The command to run.
-        cwd (str, optional): Working directory.
-        env (dict, optional): Environment variables.
-    Returns:
-        int: The exit code of the command.
-    """
-    # Print the command to be run in the terminal
-    print_in_dev(f"Running command in terminal: {command}")
-
-    if keep_alive:
-        print_debug("Keep alive on, terminal will stay open")
-        bash_suffix = "; exec bash"
-    else:
-        bash_suffix = ""
-
-    command = command.strip()
-
-    if sudo:
-        try:
-            sudo_prefix = "sudo " * check_root()  # Ensure the function is called with root privileges
-        except Exception as e:
-            print_debug(f"Failed to check root privileges, using empty sudo prefix : {e}")
-            sudo_prefix = ""
-        if command[:4] != "sudo":
-            command = sudo_prefix + command
-        else:
-            print_debug("Already using sudo")
-    if env == None:
+    if env is None:
         env = dict(os.environ)
-        print_debug("Using default environment variables")
-    if new_terminal:
-        commands = ['gnome-terminal', '--', 'bash', '-c', f'{command}{bash_suffix}']
-        print_in_dev(f"Running in new terminal : {commands}")
-        return subprocess.Popen(commands, cwd=cwd, env=env)
-    else:
-        print_debug("Running in background")
-        return subprocess.Popen(command, cwd=cwd, env=env)
 
-def run_python_script(file_path: str,
+    final_argv = _prefix_sudo_argv(
+        argv,
+        want_sudo=want_sudo,
+        non_interactive=sudo_non_interactive,
+        preserve_env=sudo_preserve_env,
+    )
+
+    return subprocess.run(
+        final_argv,
+        cwd=cwd,
+        env=env,
+        capture_output=capture_output,
+        check=check,
+        text=text,
+    )
+
+def run_command_str(
+    command: str,
+    *,
     cwd: Optional[str] = None,
     env: Optional[Dict[str, str]] = None,
-    sudo: bool = False,
-    new_terminal: bool = False,
-    keep_alive: bool = False) -> Popen[bytes]:
+    want_sudo: bool = False,
+    sudo_non_interactive: bool = True,
+    sudo_preserve_env: bool = False,
+    capture_output: bool = True,
+    check: bool = True,
+    text: bool = True,
+) -> subprocess.CompletedProcess[str]:
     """
-    Run a shell command in a real terminal (PTY).
+    Convenience wrapper when you have a simple string command (no pipes, &&, etc.).
+    Splits with shlex and calls run_command.
+    """
+    argv = shlex.split(command)
+    return run_command(
+        argv,
+        cwd=cwd,
+        env=env,
+        want_sudo=want_sudo,
+        sudo_non_interactive=sudo_non_interactive,
+        sudo_preserve_env=sudo_preserve_env,
+        capture_output=capture_output,
+        check=check,
+        text=text,
+    )
+
+def run_process(argv: List[str],
+                *,
+                cwd: Optional[str] = None,
+                env: Optional[Dict[str, str]] = None,
+                want_sudo: bool = False,
+                new_terminal: bool = False,
+                open_window: bool = False,
+                interactive: bool = False,
+                window_title: Optional[str] = None,
+                sudo_preserve_env: bool = False,
+                sudo_non_interactive: bool = True) -> subprocess.Popen[bytes]:
+    """
+    Run a command (argv) robustly. Creates a new process group so you can signal it later.
+
     Args:
-        command (str): The command to run.
-        cwd (str, optional): Working directory.
-        env (dict, optional): Environment variables.
+        argv: command as a list, e.g. ["python3", "script.py", "--flag"]
+        want_sudo: let this function decide whether/how to prefix sudo
+        new_terminal: if True, spawn gnome-terminal and exec the command
+        open_window: if True, spawn a Tk window that shows the process' TTY output
+        interactive: when open_window=True, allow typing to child's stdin (input())
+        window_title: override the Tk window title
     Returns:
-        int: The exit code of the command.
+        subprocess.Popen: the child process (you still keep full control from main)
     """
 
-    # Print the command to be run in the terminal
-    command = get_python_launcher(sudo=sudo) + " " + file_path  # Prepend the Python launcher command used to run the script
-    return run_process(command=command, cwd=cwd, sudo=sudo, keep_alive=keep_alive, env=env, new_terminal=new_terminal)
+    if env is None:
+        env = dict(os.environ)
+
+    # Build final argv (handle sudo once, centrally)
+    final_argv = _prefix_sudo_argv(
+        argv,
+        want_sudo=want_sudo,
+        non_interactive=sudo_non_interactive,
+        preserve_env=sudo_preserve_env
+    )
+    if new_terminal and open_window:
+        raise ValueError("Choose either new_terminal or open_window, not both.")
+    
+    if new_terminal:
+        # Use bash -lc with exec so signals hit the real process.
+        inner = "exec " + " ".join(shlex.quote(a) for a in final_argv)
+        cmd = ['gnome-terminal', '--', 'bash', '-lc', inner]
+        print_in_dev(f"Running in new terminal: {cmd}")
+        return subprocess.Popen(cmd, cwd=cwd, env=env, start_new_session=True)
+
+    if not open_window:
+        # Normal, non-windowed process
+        print_debug(f"Running: {final_argv}")
+        return subprocess.Popen(final_argv, cwd=cwd, env=env, start_new_session=True)
+    else:
+        print_in_dev(f"Not implemented, will run in a new terminal instead, kill it manually: {final_argv}")
+         # Use bash -lc with exec so signals hit the real process.
+        inner = "exec " + " ".join(shlex.quote(a) for a in final_argv)
+        cmd = ['gnome-terminal', '--', 'bash', '-lc', inner]
+        print_in_dev(f"Running in new terminal: {cmd}")
+        return subprocess.Popen(cmd, cwd=cwd, env=env, start_new_session=True)
+
+def run_python(*,
+               module: Optional[str] = None,
+               script: Optional[str] = None,
+               args: Sequence[str] = (),
+               cwd: Optional[str] = None,
+               env: Optional[Dict[str, str]] = None,
+               want_sudo: bool = False,
+               new_terminal: bool = False,
+               open_window: bool = False,
+               window_title: Optional[str] = None,
+               interactive: bool = False,
+               sudo_preserve_env: bool = True,
+               sudo_non_interactive: bool = True):
+    """
+    Launch Python using the SAME interpreter as this process.
+
+    Exactly one of `module` or `script` must be provided.
+    `args` is a sequence of extra arguments for the target.
+    """
+
+    py = sys.executable or shutil.which("python3") or "python3"
+    if module is not None:
+        argv = [py, "-m", module, *map(str, args)]
+    elif script is not None:
+        argv = [py, script, *map(str, args)]
+    else:
+        raise ValueError("Specify exactly one of `module` or `script`.")
+
+    return run_process(
+        argv,
+        cwd=cwd,
+        env=env,
+        want_sudo=want_sudo,
+        new_terminal=new_terminal,
+        open_window=open_window,
+        window_title=window_title,
+        interactive=interactive,
+        sudo_preserve_env=sudo_preserve_env,
+        sudo_non_interactive=sudo_non_interactive,
+    )

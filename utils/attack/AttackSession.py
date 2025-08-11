@@ -179,7 +179,7 @@ def try_loading_main_attack(py_file: Path) -> Optional[Type[AttackInterface]]:
         print_debug(f"Failed to import attack module from {py_file} : {e}")
         return None
 
-def build_attack_from_module(module: Path, attack_params: Parameters, enable_spoofing: bool) -> Optional[AttackSession]:
+def build_attack_from_module(module: Path, attack_params: Parameters, enable_spoofing: bool, open_window: bool = False) -> Optional[AttackSession]:
     """
     Build an attack instance from a module path.
     

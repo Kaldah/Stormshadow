@@ -201,6 +201,8 @@ def main() -> int:
 
     stormshadow.setup()
     stormshadow.run()
+    # Wait for the user to stop the application
+    input("Press Enter to stop StormShadow...")
     stormshadow.stop()
 
     return 0

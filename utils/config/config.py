@@ -250,7 +250,22 @@ def UpdateDefaultConfigFromCLIArgs(config: Config, args: Parameters) -> None:
                                   "with simple format settings with simple letters like "
                                   "--log_format anlm for asctime, name, levelname and message")
                 pass
-            
+            case "max_count":
+                # Set maximum count for attacks
+                if isinstance(value, int):
+                    print_debug(f"Setting maximum count to '{value}'")
+                    parameters.set("max_count", value, ["attack"])
+                else:
+                    print_warning(f"Unsupported type for max_count: {type(value)}. Expected int.")
+            case "open_window":
+                # Set whether to open a new terminal window for the attack
+                if isinstance(value, bool) :
+                    print_debug(f"Setting open_window to '{value}' on attack, lab and metrics")
+                    parameters.set("open_window", value, ["app", "enabled"])
+                    parameters.set("open_window", value, ["attack"])
+                    parameters.set("open_window", value, ["metrics"])
+                    parameters.set("open_window", value, ["lab"])
+                    
             case _:
                 if value is not None:
                     # Set custom parameters

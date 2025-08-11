@@ -1,4 +1,3 @@
-import os
 import random
 import signal
 import sys
@@ -10,6 +9,8 @@ from utils.core.printing import print_debug, print_success, print_warning
 from scapy.packet import Packet as ScapyPacket
 from scapy.layers.inet import IP, UDP
 import socket
+from types import FrameType
+
 
 EPHEMERAL_PORTS = range(49152, 65536)
 
@@ -63,6 +64,7 @@ class Spoofer:
             pkt: ScapyPacket = IP(packet.get_payload())
             pkt.src = self.get_spoofed_ip()
             pkt[UDP].sport = random_ephemeral_port()
+            # We delete the checksums to force Scapy to recalculate them
             del pkt[IP].chksum
             del pkt[UDP].chksum
             packet.set_payload(bytes(pkt))
@@ -77,9 +79,9 @@ class Spoofer:
                 self.netfilter_spoofing_queue.unbind()
             print_debug(f"Packet spoofing completed for queue {self.attack_queue_num}.")
 
-    def cleanup(self, signum, frame):
+    def cleanup(self, signum: int, frame: Optional[FrameType]):
         print("Cleanup before exit!")
-        # ... your cleanup code ...
+        # Cleanup code
         if self.netfilter_spoofing_queue is not None:
             self.netfilter_spoofing_queue.unbind()
         sys.exit(0)
@@ -112,6 +114,7 @@ if __name__ == "__main__":
     )
 
     signal.signal(signal.SIGTERM, spoofer.cleanup)
+    signal.signal(signal.SIGINT, spoofer.cleanup)
 
     netfilter_spoofing_queue = NetfilterQueue()
     netfilter_spoofing_queue.bind(attack_queue_num, spoofer.packet_spoofer)

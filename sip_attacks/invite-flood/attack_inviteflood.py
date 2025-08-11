@@ -11,7 +11,7 @@ from utils.attack.attack_enums import AttackProtocol, AttackType
 from utils.core.printing import print_error, print_info
 from utils.interfaces.attack_interface import AttackInterface
 from utils.registry.metadata import ModuleInfo
-from utils.core.command_runner import run_command
+from utils.core.command_runner import run_command_str
 
 from sip_attacks.sip_spoofing import SipPacketSpoofer 
 
@@ -42,7 +42,8 @@ class InviteFloodAttack(AttackInterface):
                  user_agent: str = "StormShadow",
                  spoofing_subnet: Optional[str] = None,
                  custom_payload_path: Optional[Path] = None,
-                 sip_users: List[int] = []) -> None:
+                 sip_users: List[int] = [],
+                 open_window: bool = False) -> None:
         """Initialize the attack with parameters."""
  
         # Call the parent class constructor
@@ -73,7 +74,8 @@ class InviteFloodAttack(AttackInterface):
             spoofed_subnet=spoofing_subnet,
             victim_port=target_port,
             victim_ip=target_ip,
-            attacker_port=source_port
+            attacker_port=source_port,
+            open_window=open_window
         ) if spoofing_subnet else None
 
         self.debug_parameters()
@@ -105,7 +107,7 @@ class InviteFloodAttack(AttackInterface):
                 f"-S {self.source_port} "  # source port
                 # f"-D {self.target_port} "  # destination port
             )
-            run_command(command,sudo=True, capture_output=False, check=True)
+            run_command_str(command, want_sudo=True, capture_output=False, check=True)
         except Exception as e:
             print_error(f"Failed to run InviteFlood attack: {e}")
             self.cleanup()

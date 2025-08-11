@@ -10,7 +10,7 @@ import time
 
 from .core.printing import print_info, print_error, print_debug
 from .config.config import Config
-from utils.core.command_runner import run_process, run_command
+from utils.core.command_runner import run_command_str, run_process
 
 class LabManager:
     """
@@ -38,6 +38,8 @@ class LabManager:
         self.project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.lab_script_path = os.path.join(self.project_root, "sip-lab", "run_victim.sh")
         self.keep_lab_open = keep_lab_open
+
+        self.is_running = False  # Track if the lab is currently running
         print_info("Lab manager initialized")
 
     def _cleanup_container(self) -> None:
@@ -47,19 +49,24 @@ class LabManager:
         try:
             print_info("Cleaning up existing containers...")
             
-            # Check if container exists
-            result = run_command(
-                f"sudo docker ps -a --format '{{{{.Names}}}}' | grep -q '^{self.container_name}$'",
+            # Check if container exists by listing all containers and checking names
+            result = run_command_str(
+                f"docker ps -a --format '{{{{.Names}}}}'",
                 check=False,
-                capture_output=True
+                capture_output=True,
+                want_sudo=True
             )
             
-            if result.returncode == 0:
+            # Check if our container name is in the output
+            container_names = result.stdout.strip().split('\n') if result.stdout.strip() else []
+            container_exists = self.container_name in container_names
+            
+            if container_exists:
                 print_info(f"Removing existing container '{self.container_name}'...")
-                run_command(f"sudo docker rm -f {self.container_name}")
+                run_command_str(f"docker rm -f {self.container_name}", want_sudo=True)
                 print_info("Container cleanup complete")
             else:
-                print_debug("No existing container found")
+                print_debug(f"Container '{self.container_name}' does not exist or was already removed")
                 
         except Exception as e:
             print_error(f"Error during container cleanup: {e}")
@@ -73,7 +80,7 @@ class LabManager:
         """
         try:
             # Check if image exists
-            result = run_command(
+            result = run_command_str(
                 f"sudo docker images -q {self.docker_image}",
                 capture_output=True,
                 check=False
@@ -85,8 +92,8 @@ class LabManager:
             
             print_info(f"Building Docker image '{self.docker_image}'...")
             dockerfile_path = os.path.join(self.project_root, "sip-lab", "sip_server")
-            
-            build_result = run_command(
+
+            build_result = run_command_str(
                 f"sudo docker build -t {self.docker_image} .",
                 cwd=dockerfile_path,
                 capture_output=False
@@ -136,14 +143,26 @@ class LabManager:
             
             # Start the container in a new terminal so it can be interactive
             self.container_process = run_process(
-                command=docker_command,
+                docker_command.split(),
                 new_terminal=True,
-                keep_alive=False
+                want_sudo=True,
+                sudo_preserve_env=True,
+                sudo_non_interactive=True
             )
             
             print_info(f"Lab container '{self.container_name}' started successfully")
-            print_info("Container is running in a new terminal window")
-            
+            waiting_time = 0  # seconds to wait for the container to be ready
+            timeout = 5  # seconds to wait for the container to be ready
+            status = self.status()
+            while (self.is_running is False and waiting_time < timeout):
+                time.sleep(0.2)  # Wait for a short time before checking again
+                waiting_time += 0.2
+                status = self.status()
+            if waiting_time >= timeout:
+                print_error("Lab container did not start within the expected time")
+                raise Exception("Lab container did not start in time")
+            print_info(f"Container is running in a new terminal window: {status}")
+
         except Exception as e:
             print_error(f"Error starting lab: {e}")
             self.stop()
@@ -162,8 +181,8 @@ class LabManager:
                 try:
                     print_info(f"Terminating container process '{self.container_name}'...")
                     self.container_process.terminate()
-                    time.sleep(2)  # Give it time to terminate gracefully
-                    
+                    time.sleep(0.2)  # Give it time to terminate gracefully
+
                     if self.container_process.poll() is None:
                         self.container_process.kill()
                     # Clean dnat rules if any
@@ -171,8 +190,7 @@ class LabManager:
                 except Exception as e:
                     print_debug(f"Error terminating container process: {e}")
                 finally:
-                    self.container_process = None
-                
+                    self.container_process = None                
                 # Clean up the container
                 self._cleanup_container()
                 
@@ -181,7 +199,7 @@ class LabManager:
         except Exception as e:
             print_error(f"Error stopping lab: {e}")
 
-    def status(self) -> bool:
+    def status(self) -> str:
         """
         Check if the lab is running.
         
@@ -189,24 +207,18 @@ class LabManager:
             bool: True if lab is running, False otherwise
         """
         try:
-            result = run_command(
-                f"sudo docker ps --format '{{{{.Names}}}}' | grep -q '^{self.container_name}$'",
+            result = run_command_str(
+                f"docker ps --filter \"name={self.container_name}\" --format '{{{{.Status}}}}'",
                 check=False,
-                capture_output=True
+                capture_output=True,
+                want_sudo=True
             )
-            
-            is_running = result.returncode == 0
-            
-            if is_running:
-                print_info(f"Lab container '{self.container_name}' is running")
-            else:
-                print_info(f"Lab container '{self.container_name}' is not running")
-                
-            return is_running
-            
+            status_output = result.stdout.strip()
+            self.is_running = status_output.startswith("Up")
+            return status_output
         except Exception as e:
             print_error(f"Error checking lab status: {e}")
-            return False
+            return "Unknown"
 
     def restart(self) -> None:
         """

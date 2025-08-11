@@ -122,7 +122,10 @@ class ConfigManager:
             ["lab", "server_ip"],
             ["lab", "return_path", "dnat_target_ip"],
             ["lab", "return_path", "dnat_port"],
-            ["lab", "return_path", "spoofed_subnet"]
+            ["lab", "return_path", "spoofed_subnet"],
+            ["metrics", "open_window"],
+            ["lab", "open_window"],
+            ["attack", "open_window"]
         ]
 
         # Get default values for auto configurations
@@ -180,6 +183,9 @@ class ConfigManager:
                     case "spoofed_subnet":
                         # Use the attack spoofing subnet
                         value = parameters.get("spoofing_subnet", "10.10.123.0/25", ["attack"])
+                    case "open_window":
+                        # Use the app open_window parameter
+                        value = parameters.get("open_window", True, ["app", "enabled"])
                     case _ : pass  # No specific action for other keys
                 # If a value is resolved, set it in the parameters
                 if value is not None:

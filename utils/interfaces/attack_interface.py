@@ -36,7 +36,8 @@ class AttackInterface(ABC):
                  user_agent: str = "StormShadow", # User agent string for the attack
                  spoofing_subnet: Optional[str] = None, # Subnet for IP spoofing if needed
                  custom_payload_path: Optional[Path] = None, # Custom payload file path
-                 sip_users: List[int]=[]): # List of SIP users to target
+                 sip_users: List[int]=[],
+                 open_window: bool = False): # List of SIP users to target
 
         self.attack_type : AttackType = AttackType.DDOS  # Default attack type, can be overridden
         self.attack_protocol : AttackProtocol = AttackProtocol.SIP  # Default protocol, can be overridden
@@ -60,6 +61,7 @@ class AttackInterface(ABC):
         self.spoofing_subnet : Optional[str] = spoofing_subnet  # Subnet for IP spoofing
         self.user_agent : str = user_agent  # User agent string
         self.custom_payload_path : Optional[Path] = custom_payload_path  # Path to custom payload file
+        self.open_window : bool = open_window  # Whether to open a new window for the attack
 
         self.debug_parameters()
     @abstractmethod

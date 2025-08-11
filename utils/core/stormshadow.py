@@ -8,7 +8,6 @@ Author: Corentin COUSTY
 """
 
 from pathlib import Path
-from time import sleep
 from typing import Optional
 
 from ..config.config import Config, ConfigType, Parameters
@@ -55,8 +54,6 @@ class StormShadow:
         self.gui_config : Config = self.configManager.get_config(ConfigType.GUI)
         self.custom_configs : Config = self.configManager.get_config(ConfigType.CUSTOM)
 
-        self.keep_lab_open = self.lab_on and self.attack_on
-
     def setup(self) -> None:
         """
         Run the StormShadow application.
@@ -67,7 +64,7 @@ class StormShadow:
         if self.lab_on:
             try :
                 print_debug("Lab mode is enabled, initializing lab manager...")
-                self.lab_manager = LabManager(self.configManager.get_config(ConfigType.LAB), keep_lab_open=self.keep_lab_open)
+                self.lab_manager = LabManager(self.configManager.get_config(ConfigType.LAB))
                 print_success("Lab mode is enabled.")
             except Exception as e:
                 print_error(f"Failed to initialize lab manager: {e}")
@@ -106,7 +103,6 @@ class StormShadow:
                     self.lab_manager = None
             else:
                 print_error("Lab manager is not initialized but should be. Skipping lab features.")
-        sleep(5)
         if self.attack_on :
             if self.attack_manager:
                 try:
@@ -123,6 +119,7 @@ class StormShadow:
         Stop the features of the StormShadow application.
         For CLI mode, this will stop the main application loop.
         """
+        
         print_info("Stopping features...")
 
         if self.attack_on and self.attack_manager:

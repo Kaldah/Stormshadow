@@ -29,6 +29,7 @@ app:
     metrics: true  # Enable metrics collection by default
     log_file: false  # Enable logging to a file
     gui: false  # Enable GUI
+    open_window: false # Terminal window will be opened for the attack, lab and spoofer by default
 
 log:
   file: "logs/stormshadow_sip.log"  # Log file path
@@ -55,7 +56,7 @@ metrics:
   collection_interval: 5
   # Attack configuration
   ack_return_queue_num: "auto"  # Automatically determine the queue number for ACK return
-
+  open_window: "auto"  # Automatically determine if a new terminal window should be opened for the metrics collection
 # Attack configuration
 attack:
   attack_name: "invite-flood"  # Type of attack to perform, can be "sip_invite", "sip_ack", etc.
@@ -69,6 +70,7 @@ attack:
   delay: 0.01 # Delay between each invites put 0 for maximum speed
   max_duration: 60  # Maximum duration of the attack in seconds put 0 for unlimited
   rate : 100  # Rate of SIP INVITE messages per second
+  open_window: "auto"  # Open a new terminal window for the attack by default
   sip_users :
     - "200"
     - "201"
@@ -83,7 +85,7 @@ lab:
   interface: "auto" # Use "auto" to automatically determine the interface from the network configuration
   server_ip: "auto" # Use "auto" to automatically determine the server IP from the used interface
   docker_name: "stormshadow-sip-server"
-  
+  open_window: "auto"  # Automatically determine if a new terminal window should be opened for the lab
   # Return path configuration when the attack uses spoofing
   return_path:
     dnat_target_ip: "auto" # Automatically determine the target IP for DNAT (return to attacker)

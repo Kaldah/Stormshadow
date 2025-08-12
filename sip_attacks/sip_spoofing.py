@@ -9,6 +9,7 @@ from netfilterqueue import NetfilterQueue
 import socket
 
 def wait_ready_signal(queue_num:int, timeout:int=5):
+    print_debug(f"Waiting for spoofer to signal ready on queue {queue_num} with timeout {timeout} seconds")
     sock_path = f'/tmp/spoofer_ready_{queue_num}.sock'
     if os.path.exists(sock_path):
         os.remove(sock_path)

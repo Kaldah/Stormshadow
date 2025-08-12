@@ -3,7 +3,10 @@ import sys
 import shutil
 import shlex
 import subprocess
+import threading
+
 from typing import List, Optional, Dict, Sequence
+from utils.core.console_window import ConsoleWindow
 from utils.core.printing import print_debug, print_in_dev, print_warning
 
 def _prefix_sudo_argv(argv: List[str],
@@ -167,17 +170,35 @@ def run_process(argv: List[str],
         print_in_dev(f"Running in new terminal: {cmd}")
         return subprocess.Popen(cmd, cwd=cwd, env=env, start_new_session=True)
 
-    if not open_window:
-        # Normal, non-windowed process
-        print_debug(f"Running: {final_argv}")
-        return subprocess.Popen(final_argv, cwd=cwd, env=env, start_new_session=True)
-    else:
-        print_in_dev(f"Not implemented, will run in a new terminal instead, kill it manually: {final_argv}")
-         # Use bash -lc with exec so signals hit the real process.
-        inner = "exec " + " ".join(shlex.quote(a) for a in final_argv)
-        cmd = ['gnome-terminal', '--', 'bash', '-lc', inner]
-        print_in_dev(f"Running in new terminal: {cmd}")
-        return subprocess.Popen(cmd, cwd=cwd, env=env, start_new_session=True)
+    if open_window:
+        # Use ConsoleWindow.spawn to properly handle the terminal backend
+        title = window_title or "Console Window"
+        win = ConsoleWindow.spawn(
+            final_argv,
+            cwd=cwd,
+            env=env,
+            prefer_tty=True,
+            title=title,
+            interactive=interactive,
+            auto_close=True,
+            start_new_session=True
+        )
+        # Start the window in a separate thread so it doesn't block
+        def run_window():
+            win.create_tk_console()
+        
+        window_thread = threading.Thread(target=run_window, daemon=True)
+        window_thread.start()
+        
+        # Return the process from the ConsoleWindow
+        proc = win.process or win.io.proc
+        if proc is None:
+            raise RuntimeError("Failed to create process for console window")
+        return proc
+
+    # Normal, non-windowed process
+    print_debug(f"Running: {final_argv}")
+    return subprocess.Popen(final_argv, cwd=cwd, env=env, start_new_session=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 def run_python(*,
                module: Optional[str] = None,

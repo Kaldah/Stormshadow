@@ -87,6 +87,7 @@ class Spoofer:
         sys.exit(0)
 
     def send_ready_signal(self):
+        print_debug(f"Waiting for spoofer to signal ready on queue {self.attack_queue_num}")
         sock_path = f'/tmp/spoofer_ready_{self.attack_queue_num}.sock'
         client = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
         client.sendto(b'ready', sock_path)

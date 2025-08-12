@@ -16,10 +16,14 @@ from pathlib import Path
 import sys
 import platform
 import argparse
+from typing import Optional
+from types import FrameType
 
 from utils.config.config import Parameters
 from utils.core.printing import print_in_dev, print_info
 from utils.core.stormshadow import StormShadow
+
+import signal
 
 def print_banner() -> None:
     """Print application banner."""
@@ -185,6 +189,19 @@ def argToParameters(args: argparse.Namespace, unknown_args: list[str]) -> Parame
 
     return parameters
 
+def signal_handler(stormshadow_instance: 'StormShadow'):
+    """Create a signal handler that properly cleans up the StormShadow instance."""
+    def handler(signum: int, frame: Optional[FrameType]) -> None:
+        print_info(f"\nReceived signal {signum}. Initiating clean shutdown...")
+        try:
+            stormshadow_instance.stop()
+        except Exception as e:
+            print_info(f"Error during cleanup: {e}")
+        finally:
+            print_info("Clean shutdown completed.")
+            sys.exit(0)
+    return handler
+
 def main() -> int:
     """Main entry point."""
     print_banner()
@@ -200,10 +217,29 @@ def main() -> int:
     stormshadow = StormShadow(CLI_Args=params, default_config_path=args.config)
 
     stormshadow.setup()
-    stormshadow.run()
-    # Wait for the user to stop the application
-    input("Press Enter to stop StormShadow...")
-    stormshadow.stop()
+    
+    # Set up signal handlers for clean shutdown
+    handler = signal_handler(stormshadow)
+    signal.signal(signal.SIGINT, handler)   # Ctrl+C
+    signal.signal(signal.SIGTERM, handler)  # Termination signal
+    if hasattr(signal, 'SIGHUP'):
+        signal.signal(signal.SIGHUP, handler)   # Hangup signal (Unix only)
+    if hasattr(signal, 'SIGQUIT'):
+        signal.signal(signal.SIGQUIT, handler)  # Quit signal (Unix only)
+
+    try:
+        stormshadow.run()
+        
+        # Wait for signals (Ctrl+C, SIGTERM, etc.)
+        print_info("StormShadow is running. Press Ctrl+C to stop...")
+        
+        # Block until a signal is received
+        signal.pause()
+        
+    except Exception as e:
+        print_info(f"Unexpected error: {e}. Initiating clean shutdown...")
+        stormshadow.stop()
+        return 1
 
     return 0
 

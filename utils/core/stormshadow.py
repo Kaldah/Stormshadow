@@ -76,7 +76,10 @@ class StormShadow:
         if self.attack_on:
             try:
                 print_debug("Attack mode is enabled, initializing attack manager...")
-                attack_modules_path = Path("sip_attacks")
+                # Use absolute path relative to the current file location
+                from .system_utils import get_project_root
+                project_root = get_project_root()
+                attack_modules_path = project_root / "sip_attacks"
                 self.attack_manager = AttackManager(self.configManager.get_config(ConfigType.ATTACK), attack_modules_path, spoofing_enabled=self.spoofing_on, return_path_enabled=self.return_path_on)
                 print_success("Attack mode is enabled.")
             except Exception as e:

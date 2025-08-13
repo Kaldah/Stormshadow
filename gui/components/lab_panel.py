@@ -226,9 +226,9 @@ class LabPanel:
         # Create and start lab instance
         success = self.gui_manager.create_lab_instance(config_params)
         if success:
-            self.lab_instance = "lab"
+            self.lab_instance = "lab_manager"  # Use correct instance name
             
-            success = self.gui_manager.start_instance("lab")
+            success = self.gui_manager.start_instance("lab_manager")  # Use correct instance name
             if success:
                 self._update_button_states(lab_running=True)
                 self._add_status_message("Lab started successfully!")

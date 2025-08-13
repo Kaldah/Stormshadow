@@ -129,14 +129,13 @@ class MenuBar:
             
             # Check for Docker
             try:
-                import subprocess
-                result = subprocess.run(['docker', '--version'], 
-                                      capture_output=True, text=True, timeout=5)
-                if result.returncode == 0:
-                    checks.append("✓ Docker is available")
+                from gui.utils.command_utils import get_command_version
+                docker_version = get_command_version('docker')
+                if docker_version:
+                    checks.append(f"✓ Docker is available ({docker_version})")
                 else:
                     checks.append("✗ Docker is not available")
-            except:
+            except Exception:
                 checks.append("✗ Docker is not available")
             
             report = "System Check Report:\n\n" + "\n".join(checks)

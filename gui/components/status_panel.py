@@ -222,14 +222,13 @@ class StatusPanel:
         
         # Update Docker status
         try:
-            import subprocess
-            result = subprocess.run(['docker', '--version'], 
-                                  capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
+            from gui.utils.command_utils import get_command_version
+            docker_version = get_command_version('docker')
+            if docker_version:
                 self.info_labels["Docker Status:"].config(text="✓ Available", style="Success.TLabel")
             else:
                 self.info_labels["Docker Status:"].config(text="✗ Not available", style="Error.TLabel")
-        except:
+        except Exception:
             self.info_labels["Docker Status:"].config(text="✗ Not available", style="Error.TLabel")
         
         # Update available attacks count

@@ -55,7 +55,10 @@ class GUIStormManager:
         """Discover available attack modules."""
         print_debug("Discovering available attack modules...")
         try:
-            attack_modules_path = Path("sip_attacks")
+            # Use absolute path relative to the project root
+            from utils.core.system_utils import get_project_root
+            project_root = get_project_root()
+            attack_modules_path = project_root / "sip_attacks"
             self.available_attacks = find_attack_modules(attack_modules_path)
             print_info(f"Found {len(self.available_attacks)} attack modules: {list(self.available_attacks.keys())}")
         except Exception as e:
@@ -86,6 +89,10 @@ class GUIStormManager:
             self.remove_instance(instance_name)
         
         try:
+            # Get default IP address
+            from utils.core.system_utils import get_default_ip
+            default_ip = get_default_ip()
+            
             # Create parameters for attack mode
             attack_params = Parameters({
                 "mode": "attack",
@@ -96,7 +103,7 @@ class GUIStormManager:
                 "open_window": True,
                 "spoofing_enabled": config_params.get("spoofing_enabled", True),
                 "return_path_enabled": config_params.get("return_path_enabled", True),
-                "target_ip": config_params.get("target_ip", "127.0.0.1"),
+                "target_ip": config_params.get("target_ip", default_ip),
                 "target_port": config_params.get("target_port", 5060),
                 "max_count": config_params.get("max_count", 100),
                 "dry_run": config_params.get("dry_run", False)

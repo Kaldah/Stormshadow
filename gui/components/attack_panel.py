@@ -74,11 +74,18 @@ class AttackPanel:
                                     style="Card.TFrame")
         target_frame.pack(fill=tk.X, pady=(0, 10))
         
+        # Get default IP from system utils
+        try:
+            from utils.core.system_utils import get_default_ip
+            default_ip = get_default_ip()
+        except Exception:
+            default_ip = "127.0.0.1"
+        
         # Target IP
         ttk.Label(target_frame, text="Target IP:", style="Heading.TLabel").grid(
             row=0, column=0, sticky=tk.W, padx=10, pady=5)
         
-        self.target_ip_var = tk.StringVar(value="127.0.0.1")
+        self.target_ip_var = tk.StringVar(value=default_ip)
         self.target_ip_entry = ttk.Entry(target_frame, textvariable=self.target_ip_var, width=20)
         self.target_ip_entry.grid(row=0, column=1, sticky=tk.W, padx=10, pady=5)
         create_tooltip(self.target_ip_entry, "IP address of the target SIP server")
@@ -100,6 +107,8 @@ class AttackPanel:
                   command=lambda: self._set_quick_target("127.0.0.1", "5060")).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(quick_frame, text="Docker Lab", 
                   command=lambda: self._set_quick_target("172.17.0.2", "5060")).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(quick_frame, text="Auto-detect", 
+                  command=self._auto_detect_ip).pack(side=tk.LEFT, padx=(0, 5))
     
     def _create_attack_options(self):
         """Create the attack options section."""
@@ -215,6 +224,19 @@ class AttackPanel:
         self.target_port_var.set(port)
         self._add_status_message(f"Target set to {ip}:{port}")
     
+    def _auto_detect_ip(self):
+        """Auto-detect and set the default IP address."""
+        try:
+            from utils.core.system_utils import get_default_ip
+            default_ip = get_default_ip()
+            self.target_ip_var.set(default_ip)
+            self._add_status_message(f"Auto-detected IP: {default_ip}")
+        except Exception as e:
+            self._add_status_message(f"Failed to auto-detect IP: {e}")
+            messagebox.showwarning("Auto-detect Failed", 
+                                 "Could not auto-detect IP address. Using default.")
+            self.target_ip_var.set("127.0.0.1")
+    
     def _start_attack(self):
         """Start the selected attack."""
         # Validate inputs
@@ -325,9 +347,16 @@ class AttackPanel:
             self.gui_manager.remove_instance(self.current_attack_instance)
             self.current_attack_instance = None
         
+        # Get default IP from system utils
+        try:
+            from utils.core.system_utils import get_default_ip
+            default_ip = get_default_ip()
+        except Exception:
+            default_ip = "127.0.0.1"
+        
         # Reset all variables to defaults
         self.attack_var.set("")
-        self.target_ip_var.set("127.0.0.1")
+        self.target_ip_var.set(default_ip)
         self.target_port_var.set("5060")
         self.max_count_var.set("100")
         self.delay_var.set("0")

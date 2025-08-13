@@ -27,9 +27,19 @@ from gui.managers.gui_storm_manager import GUIStormManager
 class StormShadowGUI:
     """Main GUI application class for StormShadow."""
     
-    def __init__(self):
-        """Initialize the GUI application."""
+    def __init__(self, cli_args: Optional[Parameters] = None, config_path: Optional[Path] = None):
+        """Initialize the GUI application.
+        
+        Args:
+            cli_args: Command line arguments as Parameters object
+            config_path: Path to configuration file
+        """
         print_info("Initializing StormShadow GUI...")
+        
+        # Store configuration for later use
+        self.cli_args = cli_args or Parameters()
+        self.config_path = config_path
+        self.stormshadow = None
         
         # Create the main Tkinter root window
         self.root = tk.Tk()
@@ -45,6 +55,9 @@ class StormShadowGUI:
         except Exception:
             pass
         
+        # Initialize StormShadow backend
+        self._initialize_stormshadow()
+        
         # Initialize the GUI storm manager
         self.gui_manager = GUIStormManager()
         
@@ -56,15 +69,24 @@ class StormShadowGUI:
         
         print_success("StormShadow GUI initialized successfully")
     
+    def _initialize_stormshadow(self):
+        """Initialize the StormShadow backend with GUI privileges."""
+        try:
+            print_info("Initializing StormShadow backend...")
+            
+            # Initialize StormShadow with the CLI arguments and config
+            self.stormshadow = StormShadow(CLI_Args=self.cli_args, default_config_path=self.config_path)
+            self.stormshadow.setup()
+            
+            print_success("StormShadow backend initialized successfully")
+            
+        except Exception as e:
+            print_error(f"Failed to initialize StormShadow backend: {e}")
+            # Still continue with GUI, but some features may not work
+            self.stormshadow = None
+    
     def run(self):
-        """Start the GUI application with startup checks."""
-        from gui.utils.startup_checks import perform_startup_checks
-        
-        # Perform startup checks
-        if not perform_startup_checks():
-            print_info("User chose to exit due to startup check warnings")
-            return
-        
+        """Start the GUI application."""
         try:
             print_info("Starting StormShadow GUI...")
             self.root.mainloop()
@@ -77,13 +99,36 @@ class StormShadowGUI:
     
     def _on_closing(self):
         """Handle application closing."""
+        if hasattr(self, '_closed'):
+            return  # Already closed
+        
         print_info("Closing StormShadow GUI...")
+        self._closed = True
         
-        # Stop any running operations
-        self.gui_manager.cleanup()
+        try:
+            # Stop StormShadow backend first
+            if hasattr(self, 'stormshadow') and self.stormshadow is not None:
+                print_info("Stopping StormShadow backend...")
+                self.stormshadow.stop()
+                print_success("StormShadow backend stopped")
+        except Exception as e:
+            print_error(f"Error during StormShadow cleanup: {e}")
         
-        # Destroy the root window
-        self.root.destroy()
+        try:
+            # Stop any running operations
+            if hasattr(self, 'gui_manager'):
+                print_info("Cleaning up GUI Storm Manager...")
+                self.gui_manager.cleanup()
+                print_success("GUI Storm Manager cleanup completed")
+        except Exception as e:
+            print_error(f"Error during GUI manager cleanup: {e}")
+        
+        try:
+            # Destroy the root window if it still exists
+            if hasattr(self, 'root') and self.root.winfo_exists():
+                self.root.destroy()
+        except Exception as e:
+            print_error(f"Error during window destruction: {e}")
         
         print_success("StormShadow GUI closed")
 

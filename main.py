@@ -4,7 +4,7 @@ StormShadow SIP-Only - Simplified SIP Testing Toolkit
 
 A simplified version of StormShadow focused on SIP attacks with:
 - Modular shell scripts for iptables and Docker management
-- Simplified configuration with YAML files
+- Simplified con    params : Parameters = argToParameters(args, unknown_args)
 - Reuse of existing utils from the main StormShadow project
 - Support for lab and attack modes separately or combined
 
@@ -22,6 +22,8 @@ from types import FrameType
 from utils.config.config import Parameters
 from utils.core.printing import print_in_dev, print_info
 from utils.core.stormshadow import StormShadow
+from gui import StormShadowGUI
+from gui.utils.sudo_utils import is_running_as_root
 
 import signal
 
@@ -150,6 +152,11 @@ Examples:
         type=Path,
         help="Path to log file"
     )
+    parser.add_argument(
+        "--open_window", "-ow",
+        action=argparse.BooleanOptionalAction,
+        help="Open console window for attack output"
+    )
     return parser
 
 def argToParameters(args: argparse.Namespace, unknown_args: list[str]) -> Parameters:
@@ -210,13 +217,27 @@ def main() -> int:
     parser = create_argument_parser()
     args, unknown_args = parser.parse_known_args()
     print_in_dev(f"Parsed args: {args}")
+    
+    
     # Transform CLI args to Parameters
-    # params : Parameters = Parameters(vars(args)) # Put None values to every non provided argument
+    # params : Parameters = Parameters(vars(args)) # Put None values to every non provided argument
 
     params : Parameters = argToParameters(args, unknown_args)
     stormshadow = StormShadow(CLI_Args=params, default_config_path=args.config)
 
     stormshadow.setup()
+
+       # Check if GUI mode is requested
+    if args.mode == "gui" or args.gui:
+        print_info("Starting GUI mode...")
+          
+        # For GUI mode, we don't immediately require sudo, but warn user
+        if not is_running_as_root():
+            print_info("GUI starting in user mode. Some features may require administrator privileges.")
+        
+        gui_app = StormShadowGUI()
+        gui_app.run()
+        return 0  # GUI handles its own lifecycle, so we can return here
     
     # Set up signal handlers for clean shutdown
     handler = signal_handler(stormshadow)

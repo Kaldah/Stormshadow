@@ -279,3 +279,14 @@ def UpdateDefaultConfigFromCLIArgs(config: Config, args: Parameters) -> None:
 
     config.parameters = parameters
     print_debug(f"Updated config parameters: {config.parameters}")
+
+def UpdateFlatConfig(config:Config, new_parameters: Parameters):
+    print_debug(f"Old flat config parameters: {config.parameters}")
+    for key, value in new_parameters.items():
+        if key in config.parameters:
+            config.parameters[key] = value
+            print_debug(f"Updated flat config parameter '{key}' to '{value}'")
+        else:
+            print_warning(f"Unknown flat config parameter '{key}'")
+    print_debug(f"Final flat config parameters: {config.parameters}")
+    

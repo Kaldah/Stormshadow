@@ -36,7 +36,6 @@ class LabManager:
         
         # Get the project root directory (assuming lab manager is in utils/)
         self.project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.lab_script_path = os.path.join(self.project_root, "sip-lab", "run_victim.sh")
         self.keep_lab_open = keep_lab_open
 
         self.is_running = False  # Track if the lab is currently running
@@ -131,7 +130,7 @@ class LabManager:
             print_info("Starting Docker container...")
             
             docker_command = (
-                f"sudo docker run --rm -it "
+                f"docker run --rm -it "
                 f"--network host "
                 f"--cap-add=NET_ADMIN "
                 f"--cap-add=NET_RAW "

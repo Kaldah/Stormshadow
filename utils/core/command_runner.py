@@ -47,6 +47,7 @@ def run_command(
     - **Automatic sudo support**: if `want_sudo=True` and the current user is not root,
       the command is automatically prefixed with `sudo` (if available).
         * If `sudo_non_interactive=True`, adds `-n` to avoid hanging for a password prompt.
+        * If `sudo_non_interactive=False` (default), allows interactive password prompts.
         * If `sudo_preserve_env=True`, adds `-E` to preserve the current environment under sudo.
     - **Environment control**: you can override `cwd` (working directory) and `env` (environment variables).
     - **Output capture**: by default, both stdout and stderr are captured (`capture_output=True`),
@@ -61,6 +62,7 @@ def run_command(
         env: Optional dict of environment variables to pass to the command.
         want_sudo: Whether to prefix the command with sudo when not root.
         sudo_non_interactive: If True, pass `-n` to sudo to fail fast if a password is required.
+                              If False allow interactive password prompts.
         sudo_preserve_env: If True, pass `-E` to sudo to keep the current environment.
         capture_output: If True, capture stdout and stderr into the CompletedProcess object.
         check: If True, raise an exception if the command returns a non-zero exit code.

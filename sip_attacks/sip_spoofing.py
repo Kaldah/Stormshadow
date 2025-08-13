@@ -58,10 +58,10 @@ class SipPacketSpoofer:
         import re
         try:
             # List all OUTPUT rules
-            result = run_command_str("iptables -S OUTPUT", capture_output=True, check=True, want_sudo=True)
+            result = run_command_str("iptables -S OUTPUT", capture_output=True, check=True, want_sudo=False)
             rules = result.stdout.splitlines()
             # Regex to match NFQUEUE rules for victim IP/port
-            pattern = re.compile(r'-A OUTPUT -p udp(?: [^ ]*)* -d {}(?: [^ ]*)* --dport {}(?: [^ ]*)* -j NFQUEUE --queue-num (\d+)'.format(re.escape(self.victim_ip), self.victim_port))
+            pattern = re.compile(r'-I OUTPUT -p udp(?: [^ ]*)* -d {}(?: [^ ]*)* --dport {}(?: [^ ]*)* -j NFQUEUE --queue-num (\d+)'.format(re.escape(self.victim_ip), self.victim_port))
             queue_nums = list[int]()
             for rule in rules:
                 match = pattern.search(rule)
@@ -156,7 +156,7 @@ class SipPacketSpoofer:
             self.stop_spoofing()  # Stop any existing spoofing before starting a new one
             print_debug("Stopping existing spoofing before starting a new one.")
 
-        command = f"iptables -A OUTPUT -p udp {source_port} {dst_ip} {dst_port} -j NFQUEUE --queue-num {self.attack_queue_num}"
+        command = f"iptables -I OUTPUT -p udp {source_port} {dst_ip} {dst_port} -j NFQUEUE --queue-num {self.attack_queue_num}"
         print_debug(f"Activating spoofing with command: {command}")
         
         try:

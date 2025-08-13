@@ -12,9 +12,27 @@ This module provides system-level utility functions including:
 import os
 from subprocess import CalledProcessError, run
 from typing import Optional, Dict
+from pathlib import Path
 import netifaces
 
 from .printing import print_warning
+
+def get_project_root() -> Path:
+    """
+    Get the root directory of the StormShadow project.
+    
+    Returns:
+        Path: The absolute path to the project root directory
+    """
+    # Get the directory containing this file (/utils/core/)
+    current_file = Path(__file__).resolve()
+    
+    # Go up two levels to get to the project root
+    # /utils/core/system_utils.py -> /utils/ -> /project_root/
+    project_root = current_file.parent.parent.parent
+    
+    return project_root
+
 
 def check_root() -> bool:
     """
@@ -68,6 +86,22 @@ def get_interface_ip(interface: str) -> Optional[str]:
         print_warning(f"Error getting IP for {interface}. Falling back to localhost IP: {e}")
 
     return "127.0.1"  # Fallback to localhost if interface not found
+
+def get_default_ip() -> str:
+    """
+    Get the default IP address for the system.
+    
+    Returns:
+        str: The IP address of the default network interface
+    """
+    try:
+        default_interface = get_interface()
+        default_ip = get_interface_ip(default_interface)
+        return default_ip if default_ip else "127.0.0.1"
+    except Exception as e:
+        print_warning(f"Error getting default IP: {e}")
+        return "127.0.0.1"
+
 
 def get_system_info() -> Dict[str, str]:
     """

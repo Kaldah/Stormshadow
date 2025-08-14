@@ -120,7 +120,7 @@ def print_in_dev(message: Any, **kwargs: Any) -> None:
         message: Message to print
         **kwargs: Additional arguments for print()
     """
-    colored_message = _colorize(f"== NOT AVAILABLE IN DEV ==\n⚠ {message}\n" + "="*30, Colors.YELLOW)
+    colored_message = _colorize(f"== IN DEV ==\n⚠ {message}\n" + "="*30, Colors.YELLOW)
     colored_message = f"{Colors.YELLOW}{Colors.BOLD}{colored_message}{Colors.END}"
     print(colored_message, file=sys.stderr, **kwargs)
 

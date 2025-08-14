@@ -22,7 +22,7 @@ class LabManager:
     - Coordination with other system components
     """
 
-    def __init__(self, config: Config, keep_lab_open: bool = False) -> None:
+    def __init__(self, config: Config, keep_lab_open: bool = False, gui_mode: bool = False) -> None:
         """
         Initialize lab manager.
         
@@ -37,6 +37,7 @@ class LabManager:
         # Get the project root directory (assuming lab manager is in utils/)
         self.project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.keep_lab_open = keep_lab_open
+        self.gui_mode = gui_mode
 
         self.is_running = False  # Track if the lab is currently running
         print_info("Lab manager initialized")

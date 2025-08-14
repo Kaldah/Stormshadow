@@ -14,6 +14,8 @@ from ..config.config import Config, ConfigType, Parameters
 from utils.attack.attack_manager import AttackManager
 from utils.config.config_manager import ConfigManager
 from .printing import print_info, print_warning, print_error, print_success, print_debug
+from utils.network.iptables import cleanup_stale_rules, generate_suid, heartbeat_touch, heartbeat_remove, remove_all_rules_for_suid
+import threading
 from utils.lab_manager import LabManager
 
 class StormShadow:
@@ -21,8 +23,21 @@ class StormShadow:
     Main class for the StormShadow application.
     """
 
-    def __init__(self, CLI_Args: Parameters, default_config_path: Optional[Path] = None) -> None:
+    def __init__(self, CLI_Args: Parameters, default_config_path: Optional[Path] = None, session_uid: Optional[str] = None, preserve_existing_rules: bool = False) -> None:
         print_info("Initializing StormShadow...")
+        
+        # Generate or use provided session UID for this StormShadow instance
+        self.session_uid: str = session_uid or generate_suid()
+        print_debug(f"StormShadow session UID: {self.session_uid}")
+        
+        # Store preservation setting for existing rules
+        self.preserve_existing_rules = preserve_existing_rules
+        
+        # Start heartbeat for this session
+        self._hb_thread: Optional[threading.Thread] = None
+        self._hb_stop = threading.Event()
+        self._start_heartbeat()
+        
         # Initialize the configuration manager with CLI arguments and default config path
         print_debug("Initializing ConfigManager with CLI arguments and default config path.")        
         self.configManager = ConfigManager(CLI_Args=CLI_Args, default_config_path=default_config_path)
@@ -60,6 +75,16 @@ class StormShadow:
         """
         print_info("Starting StormShadow...")
 
+        # Proactive cleanup of stale StormShadow iptables rules on startup
+        try:
+            removed = cleanup_stale_rules()
+            if removed:
+                print_warning(f"Removed {removed} stale StormShadow iptables rules on startup")
+            else:
+                print_debug("No stale StormShadow iptables rules found on startup")
+        except Exception as e:
+            print_warning(f"Unable to perform startup iptables cleanup: {e}")
+
         # Initialize managers based on configuration
         if self.lab_on:
             try :
@@ -80,7 +105,7 @@ class StormShadow:
                 from .system_utils import get_project_root
                 project_root = get_project_root()
                 attack_modules_path = project_root / "sip_attacks"
-                self.attack_manager = AttackManager(self.configManager.get_config(ConfigType.ATTACK), attack_modules_path, spoofing_enabled=self.spoofing_on, return_path_enabled=self.return_path_on)
+                self.attack_manager = AttackManager(self.configManager.get_config(ConfigType.ATTACK), attack_modules_path, spoofing_enabled=self.spoofing_on, return_path_enabled=self.return_path_on, session_uid=self.session_uid)
                 print_success("Attack mode is enabled.")
             except Exception as e:
                 print_error(f"Failed to initialize attack manager: {e}")
@@ -123,17 +148,52 @@ class StormShadow:
         For CLI mode, this will stop the main application loop.
         """
         
-        print_info("Stopping features...")
+        print_info(f"Stopping StormShadow features for session {self.session_uid}...")
 
-        if self.attack_on and self.attack_manager:
+        if self.attack_on and hasattr(self, 'attack_manager') and self.attack_manager:
             try:
                 print_info("Stopping attack manager...")
                 self.attack_manager.stop()
             except Exception as e:
                 print_error(f"Failed to stop attack manager: {e}")
 
-        if self.lab_on and self.lab_manager:
+        if self.lab_on and hasattr(self, 'lab_manager') and self.lab_manager:
             try:
                 self.lab_manager.stop()
             except Exception as e:
                 print_error(f"Failed to stop lab manager: {e}")
+                
+        # Stop heartbeat and cleanup session rules
+        self._stop_heartbeat()
+        try:
+            # Remove heartbeat file first to prevent the cleanup logic from thinking this session is active
+            print_info(f"Removing heartbeat file for session {self.session_uid}")
+            heartbeat_remove(self.session_uid)
+            # Remove ALL iptables rules for this session (including anchor jumps)
+            print_info(f"Cleaning up iptables rules for session {self.session_uid}")
+            removed_count = remove_all_rules_for_suid(self.session_uid)
+            if removed_count > 0:
+                print_success(f"Cleaned up {removed_count} iptables rules for session {self.session_uid}")
+            else:
+                print_info(f"No rules found to clean up for session {self.session_uid}")
+        except Exception as e:
+            print_error(f"Error during rule cleanup for session {self.session_uid}: {e}")
+
+    def _start_heartbeat(self) -> None:
+        """Start heartbeat thread to keep session alive for iptables rule protection."""
+        def _hb_loop():
+            # Touch immediately then every ~50 minutes
+            heartbeat_touch(self.session_uid)
+            interval = 50 * 60  # 50 minutes
+            while not self._hb_stop.wait(timeout=interval):
+                heartbeat_touch(self.session_uid)
+        
+        self._hb_stop.clear()
+        self._hb_thread = threading.Thread(target=_hb_loop, name=f"stormshadow-main-hb-{self.session_uid}", daemon=True)
+        self._hb_thread.start()
+        
+    def _stop_heartbeat(self) -> None:
+        """Stop heartbeat thread."""
+        self._hb_stop.set()
+        if self._hb_thread and self._hb_thread.is_alive():
+            self._hb_thread.join(timeout=2)

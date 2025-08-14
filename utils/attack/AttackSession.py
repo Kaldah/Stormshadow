@@ -7,33 +7,16 @@ from utils.config.config import Parameters
 from utils.core.printing import print_debug, print_error, print_in_dev, print_info, print_success, print_warning
 from utils.interfaces.attack_interface import AttackInterface, create_attack_instance
 from .attack_enums import AttackProtocol, AttackStatus, AttackType
+from utils.attack.attack_modules_finder import find_attack_main_class, check_attack_module_structure
+from utils.network.iptables import generate_suid, remove_rules_for_suid
 
-def find_attack_main_class(module: ModuleType) -> Optional[Type[AttackInterface]]:
-    """
-    Find the main attack class in the given module.
-
-    Args:
-        module: The module to search for the attack class.
-
-    Returns:
-        The first class found that implements AttackInterface, or None if not found.
-    """
-    print_debug("Searching for attack class in module...")
-    for attr_name in dir(module):
-        attr = getattr(module, attr_name)
-        if isinstance(attr, type) and issubclass(attr, AttackInterface) and attr is not AttackInterface:
-            print_debug(f"Found attack class: {attr_name}")
-            return attr  # This is the class with the AttackInterface implementation
-    
-    print_debug("No attack class found in module.")
-    return None
 
 class AttackSession:
     """
     Base class for all attack modules.
     """
 
-    def __init__(self, name: str, main_attack: AttackInterface, enable_spoofing: bool) -> None:
+    def __init__(self, name: str, main_attack: AttackInterface, enable_spoofing: bool, session_uid: Optional[str] = None) -> None:
         self.name = name
         self.protocol = AttackProtocol.SIP
 
@@ -42,6 +25,10 @@ class AttackSession:
         self.status = AttackStatus.INITIALIZED  # Status of the attack module
         self.own_spoofing = main_attack.spoofing_implemented  # Whether the attack module is already spoofing or not
         self.enable_spoofing = enable_spoofing  # Whether spoofing is enabled or not
+
+        # Use provided session UID or generate our own
+        self.suid: str = session_uid or generate_suid()
+        self.main_attack.set_session_uid(self.suid)
 
     def start(self) -> None:
         """
@@ -84,6 +71,12 @@ class AttackSession:
             print_info(f"Attack {self.name} stopped successfully.")
             if self.enable_spoofing:
                 self.main_attack.stop_spoofing()
+            # Best-effort cleanup of any rules with this session SUID
+            try:
+                remove_rules_for_suid(self.suid)
+                remove_rules_for_suid(self.suid, table="nat")
+            except Exception:
+                pass
         except Exception as e:
             print_error(f"Error stopping attack {self.name}: {e}")
 
@@ -139,9 +132,9 @@ class AttackSession:
         """
         return self.main_attack.get_attack_type()
 
-def try_loading_main_attack(py_file: Path) -> Optional[Type[AttackInterface]]:
+def load_main_attack(py_file: Path) -> Optional[Type[AttackInterface]]:
     """
-    Try to load the attack module from a specific file.
+    Load the main attack class from a specific file, after validating the module structure.
     
     Args:
         module: Path to the attack module.
@@ -150,6 +143,11 @@ def try_loading_main_attack(py_file: Path) -> Optional[Type[AttackInterface]]:
         An instance of the attack module.
     """
     print_debug(f"Trying to load attack module from {py_file}")
+    # Ensure the directory structure is valid before importing
+    module_dir = py_file.parent
+    if not check_attack_module_structure(module_dir):
+        print_warning(f"Module directory failed structure validation: {module_dir}")
+        return None
     try:
         spec = spec_from_file_location("attack_module", str(py_file))
         if spec is None:
@@ -167,7 +165,7 @@ def try_loading_main_attack(py_file: Path) -> Optional[Type[AttackInterface]]:
 
         # Look for the main attack class implementing the AttackInterface
         print_debug(f"Looking for main attack class in {py_file}")
-        main_attack_class : Optional[Type[AttackInterface]] = find_attack_main_class(attack_module)
+        main_attack_class: Optional[Type[AttackInterface]] = find_attack_main_class(attack_module)
 
         if main_attack_class is None:
             print_warning(f"No valid attack class found in {py_file}")
@@ -179,13 +177,14 @@ def try_loading_main_attack(py_file: Path) -> Optional[Type[AttackInterface]]:
         print_debug(f"Failed to import attack module from {py_file} : {e}")
         return None
 
-def build_attack_from_module(module: Path, attack_params: Parameters, enable_spoofing: bool, open_window: bool = False) -> Optional[AttackSession]:
+def build_attack_from_module(module: Path, attack_params: Parameters, enable_spoofing: bool, session_uid: Optional[str] = None, open_window: bool = False) -> Optional[AttackSession]:
     """
     Build an attack instance from a module path.
     
     Args:
         module: Path to the attack module.
         attack_params: Parameters for the attack instance.
+        session_uid: Session unique ID to use for this attack
 
     Returns:
         An instance of the attack module.
@@ -207,7 +206,7 @@ def build_attack_from_module(module: Path, attack_params: Parameters, enable_spo
         print_debug(f"Loading attack module from path: {module}")
         print_debug(f"module contents: {list(module.glob('*.py'))}")
         for py_file in module.glob("*.py"):
-            found_class = try_loading_main_attack(py_file)
+            found_class = load_main_attack(py_file)
             if found_class is None:
                 print_debug(f"No valid attack class found in {py_file}, skipping.")
             else:
@@ -222,8 +221,12 @@ def build_attack_from_module(module: Path, attack_params: Parameters, enable_spo
         # Create an instance of the attack using the class
         main_attack = create_attack_instance(main_attack_class, attack_params)
         
+        # Set the session UID on the attack instance
+        if session_uid and hasattr(main_attack, 'set_session_uid'):
+            main_attack.set_session_uid(session_uid)
+        
         # Create an instance of the attack session
-        attack_session = AttackSession(name=main_attack.attack_name, main_attack=main_attack, enable_spoofing=enable_spoofing)
+        attack_session = AttackSession(name=main_attack.attack_name, main_attack=main_attack, enable_spoofing=enable_spoofing, session_uid=session_uid)
         print_info(f"Attack session created successfully: {attack_session.get_name()}")
         return attack_session
     except ImportError as e:

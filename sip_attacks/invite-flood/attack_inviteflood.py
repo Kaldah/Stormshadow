@@ -8,6 +8,7 @@ This module integrates with the StormShadow orchestrator architecture.
 from pathlib import Path
 from typing import List, Optional
 from utils.attack.attack_enums import AttackProtocol, AttackType
+from utils.config.config import Parameters
 from utils.core.printing import print_error, print_info
 from utils.interfaces.attack_interface import AttackInterface
 from utils.registry.metadata import ModuleInfo
@@ -66,17 +67,19 @@ class InviteFloodAttack(AttackInterface):
         self.attack_protocol = AttackProtocol.SIP  # Set a specific protocol for this template
         self.name = "InviteFloodAttack"
         self.dry_run_implemented = True  # Indicate that dry-run is implemented for this attack
-        self.resume_implemented = True  # Indicate that resume is implemented for this
+        self.resume_implemented = False  # Indicate that resume is implemented for this attack
         self.spoofing_implemented = True  # Indicate that spoofing is implemented for this attack
 
-        self.spoofer : Optional[SipPacketSpoofer] = SipPacketSpoofer(
-            attack_queue_num=attack_queue_num,
-            spoofed_subnet=spoofing_subnet,
-            victim_port=target_port,
-            victim_ip=target_ip,
-            attacker_port=source_port,
-            open_window=open_window
-        ) if spoofing_subnet else None
+        # Store spoofer parameters for lazy initialization
+        self._spoofer_params = Parameters({
+            'attack_queue_num': attack_queue_num,
+            'spoofed_subnet': spoofing_subnet,
+            'victim_port': target_port,
+            'victim_ip': target_ip,
+            'attacker_port': source_port,
+            'open_window': open_window,
+        }) if spoofing_subnet else None
+        self.spoofer : Optional[SipPacketSpoofer] = None
 
         self.debug_parameters()
         # Print the initialization message
@@ -134,6 +137,14 @@ class InviteFloodAttack(AttackInterface):
             bool: True if spoofing is successfully set up, False otherwise.
         """
         print_info("Setting up spoofing for InviteFlood attack")
+        
+        # Create spoofer lazily when spoofing starts, so session_uid is available
+        if self._spoofer_params and not self.spoofer:
+            self.spoofer = SipPacketSpoofer(
+                session_uid=getattr(self, 'session_uid', None),
+                **self._spoofer_params
+            )
+        
         if self.spoofer:
             if not self.spoofer.start_spoofing():
                 print_error("Failed to start spoofing for InviteFlood attack")

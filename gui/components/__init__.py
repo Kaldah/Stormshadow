@@ -12,7 +12,7 @@ from .menu_bar import MenuBar
 
 __all__ = [
     'MainWindow',
-    'AttackPanel', 
+    'AttackPanel',
     'LabPanel',
     'StatusPanel',
     'MenuBar'

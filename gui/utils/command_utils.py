@@ -6,7 +6,7 @@ with proper sudo handling using the custom command runner.
 """
 
 import subprocess
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from utils.core.printing import print_info, print_error, print_warning
 
 
@@ -23,12 +23,12 @@ def run_gui_command(
 ) -> subprocess.CompletedProcess[str]:
     """
     Run a command from GUI with proper sudo handling and environment preservation.
-    
+
     This function uses the custom command runner to ensure that:
     - Environment variables (PYTHONPATH, etc.) are preserved
     - Sudo prompts work correctly in GUI context
     - Commands are executed with proper privileges
-    
+
     Args:
         command: Command to execute as list of strings
         operation_name: Human-readable name for error messages
@@ -38,19 +38,19 @@ def run_gui_command(
         check: Whether to raise exception on non-zero exit
         cwd: Working directory for command
         env: Environment variables override
-        
+
     Returns:
         subprocess.CompletedProcess[str]: Result of the command
-        
+
     Raises:
         subprocess.CalledProcessError: If check=True and command fails
         PermissionError: If sudo is needed but user declines
     """
     try:
         from utils.core.command_runner import run_command
-        
+
         print_info(f"GUI running {operation_name}: {' '.join(command)}")
-        
+
         # Use custom command runner with environment preservation
         result = run_command(
             command,
@@ -63,19 +63,19 @@ def run_gui_command(
             check=check,
             text=text
         )
-        
+
         return result
-        
+
     except ImportError as e:
         print_warning(f"Custom command runner not available, falling back to subprocess: {e}")
-        
+
         # Fallback to standard subprocess with sudo if needed
         if need_sudo:
             # Add sudo with environment preservation
             final_command = ['sudo', '-E'] + command
         else:
             final_command = command
-            
+
         return subprocess.run(
             final_command,
             cwd=cwd,
@@ -84,7 +84,7 @@ def run_gui_command(
             check=check,
             text=text
         )
-    
+
     except Exception as e:
         print_error(f"Failed to run {operation_name}: {e}")
         raise
@@ -94,16 +94,16 @@ def run_docker_command(
     docker_args: List[str],
     *,
     operation_name: str = "docker operation",
-    **kwargs
+    **kwargs: Any
 ) -> subprocess.CompletedProcess[str]:
     """
     Run a docker command with automatic sudo handling.
-    
+
     Args:
         docker_args: Docker command arguments (without 'docker')
         operation_name: Human-readable name for error messages
         **kwargs: Additional arguments for run_gui_command
-        
+
     Returns:
         subprocess.CompletedProcess[str]: Result of the command
     """
@@ -119,17 +119,17 @@ def run_docker_command(
 def run_iptables_command(
     iptables_args: List[str],
     *,
-    operation_name: str = "iptables operation", 
-    **kwargs
+    operation_name: str = "iptables operation",
+    **kwargs: Any
 ) -> subprocess.CompletedProcess[str]:
     """
     Run an iptables command with automatic sudo handling.
-    
+
     Args:
         iptables_args: iptables command arguments (without 'iptables')
         operation_name: Human-readable name for error messages
         **kwargs: Additional arguments for run_gui_command
-        
+
     Returns:
         subprocess.CompletedProcess[str]: Result of the command
     """
@@ -145,10 +145,10 @@ def run_iptables_command(
 def check_command_available(command_name: str) -> bool:
     """
     Check if a command is available on the system.
-    
+
     Args:
         command_name: Name of the command to check
-        
+
     Returns:
         bool: True if command is available, False otherwise
     """
@@ -168,11 +168,11 @@ def check_command_available(command_name: str) -> bool:
 def get_command_version(command_name: str, version_arg: str = '--version') -> Optional[str]:
     """
     Get version information for a command.
-    
+
     Args:
         command_name: Name of the command
         version_arg: Argument to get version (default: --version)
-        
+
     Returns:
         Optional[str]: Version string if successful, None otherwise
     """
@@ -184,13 +184,13 @@ def get_command_version(command_name: str, version_arg: str = '--version') -> Op
             check=False,  # Don't raise exception if command fails
             capture_output=True
         )
-        
+
         if result.returncode == 0:
             # Return first line of output, stripped
             return result.stdout.strip().split('\n')[0]
         else:
             return None
-            
+
     except Exception:
         return None
 
@@ -198,7 +198,7 @@ def get_command_version(command_name: str, version_arg: str = '--version') -> Op
 def test_sudo_access() -> bool:
     """
     Test if sudo access is available without prompting for password.
-    
+
     Returns:
         bool: True if sudo access is available, False otherwise
     """

@@ -149,6 +149,11 @@ class AttackInterface(ABC):
         print_warning("Stopping spoofing not implemented in this attack module.")
         return False
 
+    # ---- Session wiring helpers ----
+    def set_session_uid(self, suid: str) -> None:
+        """Attach a StormShadow Session Unique ID to the attack instance."""
+        self.session_uid = suid
+
 def get_init_args(cls : Type[AttackInterface]) -> List[str]:
     signature = inspect.signature(cls.__init__)
     # Exclude 'self' and get argument names

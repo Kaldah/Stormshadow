@@ -14,6 +14,7 @@ License: Educational Use Only
 
 from pathlib import Path
 import sys
+import os
 import platform
 import argparse
 from typing import Optional
@@ -23,6 +24,7 @@ from utils.config.config import Parameters
 from utils.core.printing import print_in_dev, print_info
 from utils.core.stormshadow import StormShadow
 from gui import StormShadowGUI
+import shutil
 
 import signal
 
@@ -159,6 +161,41 @@ are required and restart itself with sudo while preserving your virtual environm
     )
     return parser
 
+def ensure_root_or_reexec() -> None:
+    """Ensure the program runs as root; otherwise relaunch with sudo.
+
+    Uses run_python with want_sudo=True so the same interpreter (virtualenv)
+    and environment are preserved under sudo.
+
+    Behavior:
+    - If already root (euid==0): return and continue.
+    - If not root: spawn a privileged child process running this script with the
+      same CLI args, allow an interactive sudo password prompt, then exit the
+      current (unprivileged) process with the child's return code.
+    """
+    try:
+        if os.geteuid() == 0:
+            return
+    except AttributeError:
+        # Non-POSIX platforms may not have geteuid; just continue.
+        return
+
+    print_info("Root privileges required. Restarting in-place with sudo using your venv's python...")
+
+    # Build sudo + current Python interpreter command that replaces this process.
+    # Use absolute interpreter path (sys.executable) to keep the current venv.
+    sudo_path = shutil.which("sudo") or "sudo"
+    script_path = str(Path(__file__).resolve())
+    args = [
+        sudo_path,
+        sys.executable or "python3",
+        script_path,
+        *sys.argv[1:],
+    ]
+
+    # Replace current process; stays in the same terminal and supports interactive sudo.
+    os.execvpe(args[0], args, os.environ.copy())
+
 def argToParameters(args: argparse.Namespace, unknown_args: list[str]) -> Parameters:
     """
     Convert command line arguments to Parameters object.
@@ -212,6 +249,9 @@ def signal_handler(stormshadow_instance: 'StormShadow'):
 def main() -> int:
     """Main entry point."""
     print_banner()
+
+    # Elevate to root if needed before doing anything else
+    ensure_root_or_reexec()
 
     # Create argument parser
     parser = create_argument_parser()

@@ -23,14 +23,16 @@ class AttackManager:
     - Coordination with other system components
     """
 
-    def __init__(self, config: Config, attack_modules_path: Path, spoofing_enabled: bool, return_path_enabled: bool) -> None:
+    def __init__(self, config: Config, attack_modules_path: Path, spoofing_enabled: bool, return_path_enabled: bool, session_uid: Optional[str] = None) -> None:
         """
         Initialize attack manager.
         
         Args:
             config: Optional attack configuration
+            session_uid: Session unique ID to pass to attacks
         """
         self.config = config
+        self.session_uid = session_uid
         # Try to find attack modules directory
         self.attack_modules_folder = attack_modules_path
         self.available_modules: Dict[str,Path] = find_attack_modules(self.attack_modules_folder)
@@ -86,7 +88,7 @@ class AttackManager:
             raise KeyError(f"Attack module {module_name} not found in available modules.")
         
         # Build the attack from the module path
-        self.current_attack = build_attack_from_module(module_path, self.config.parameters, enable_spoofing=self.spoofing_enabled)
+        self.current_attack = build_attack_from_module(module_path, self.config.parameters, enable_spoofing=self.spoofing_enabled, session_uid=self.session_uid)
 
         return True  # Return True if the module was loaded successfully
 

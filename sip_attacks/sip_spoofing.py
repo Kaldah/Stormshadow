@@ -7,6 +7,11 @@ from utils.core.command_runner import run_command_str, run_python
 from utils.core.printing import print_debug, print_error, print_success, print_warning
 from netfilterqueue import NetfilterQueue
 import socket
+from utils.network.iptables import (
+    add_nfqueue_rule_tagged,
+    ensure_nfqueue_rule_using_ipset,
+    heartbeat_touch,
+)
 
 def wait_ready_signal(queue_num:int, timeout:int=5):
     print_debug(f"Waiting for spoofer to signal ready on queue {queue_num} with timeout {timeout} seconds")
@@ -37,7 +42,8 @@ class SipPacketSpoofer:
                  victim_port: int = 0,
                  victim_ip: str = "",
                  attacker_port: int = 0,
-                 open_window: bool = False):
+                 open_window: bool = False,
+                 session_uid: str | None = None):
         self.spoofed_subnet : IPv4Network | IPv6Network = ip_network(spoofed_subnet)  # Format : xxx.xxx.0/24
         self.attack_queue_num : int = attack_queue_num
         self.attacker_port : int = attacker_port
@@ -50,6 +56,12 @@ class SipPacketSpoofer:
         self.spoofer_process: Optional[Popen[bytes]] = None
         self.spoofer_pid: Optional[int] = None
         self.open_window: bool = open_window
+        self.session_uid: str | None = session_uid
+        self._ipset_name: str | None = None
+
+    def set_session_uid(self, session_uid: str) -> None:
+        """Set the session UID for this spoofer."""
+        self.session_uid = session_uid
 
     def clean_nfqueue_rules(self) -> None:
         """
@@ -118,20 +130,39 @@ class SipPacketSpoofer:
             except Exception as e:
                 print_error(f"Error terminating spoofer process group: {e}")
 
-        command = f"iptables -D OUTPUT -p udp {source_port} {dst_ip} {dst_port} -j NFQUEUE --queue-num {self.attack_queue_num}"
-        print_debug(f"Deactivating spoofing with command: {command}")
-        
-        try:
-            # Run the command to remove the iptables rule
-            run_command_str(command, capture_output=False, check=True, want_sudo=True)
-            print_debug(f"Successfully deactivated spoofing for packet going to {self.victim_ip}:{self.victim_port} on queue {self.attack_queue_num}")
-            return True
-        except CalledProcessError as e:
-            print_debug(f"Failed to deactivate spoofing - maybe no rules existed: {e}")
-            return False
-        except Exception as e:
-            print_error(f"An unexpected error occurred while deactivating spoofing: {e}")
-            return False
+        # Prefer removing our tagged rule in dedicated chain
+        removed = False
+        if self.session_uid:
+            try:
+                from utils.network.iptables import remove_rules_for_suid, STORMSHADOW_CHAIN
+                # Try filter table first (where NFQUEUE rules go)
+                removed_count = remove_rules_for_suid(self.session_uid, table="filter", chain=STORMSHADOW_CHAIN)
+                if removed_count:
+                    removed = True
+                    print_debug(f"Removed {removed_count} NFQUEUE rules for session {self.session_uid}")
+            except Exception as e:
+                print_debug(f"Failed to remove rules by SUID: {e}")
+        if not removed:
+            # Fallback: try to remove from STORMSHADOW chain with direct command
+            command = f"iptables -D STORMSHADOW -p udp {source_port} {dst_ip} {dst_port} -j NFQUEUE --queue-num {self.attack_queue_num}"
+            print_debug(f"Deactivating spoofing with command: {command}")
+            try:
+                # Run the command to remove the iptables rule
+                run_command_str(command, capture_output=False, check=True, want_sudo=True)
+                print_debug(f"Successfully deactivated spoofing for packet going to {self.victim_ip}:{self.victim_port} on queue {self.attack_queue_num}")
+                removed = True
+            except CalledProcessError as e:
+                # Last resort: try OUTPUT (legacy location)
+                legacy_command = f"iptables -D OUTPUT -p udp {source_port} {dst_ip} {dst_port} -j NFQUEUE --queue-num {self.attack_queue_num}"
+                try:
+                    run_command_str(legacy_command, capture_output=False, check=True, want_sudo=True)
+                    print_debug(f"Successfully deactivated spoofing (legacy) for packet going to {self.victim_ip}:{self.victim_port} on queue {self.attack_queue_num}")
+                    removed = True
+                except CalledProcessError:
+                    print_debug(f"Failed to deactivate spoofing - maybe no rules existed: {e}")
+            except Exception as e:
+                print_error(f"An unexpected error occurred while deactivating spoofing: {e}")
+        return removed
 
     def start_spoofing(self) -> bool:
         """
@@ -146,28 +177,31 @@ class SipPacketSpoofer:
         Returns:
             bool: True if the rule was successfully created, False otherwise.
         """
-
-        source_port = f"--sport {self.attacker_port}" if self.attacker_port != 0 else ""
-        dst_ip = f"-d {self.victim_ip}" if self.victim_ip != "" else ""
-        dst_port = f"--dport {self.victim_port}" if self.victim_port != 0 else ""
         
         # Check if the queue is already set
         if self.netfilter_spoofing_queue is not None:
             self.stop_spoofing()  # Stop any existing spoofing before starting a new one
             print_debug("Stopping existing spoofing before starting a new one.")
 
-        command = f"iptables -I OUTPUT -p udp {source_port} {dst_ip} {dst_port} -j NFQUEUE --queue-num {self.attack_queue_num}"
-        print_debug(f"Activating spoofing with command: {command}")
-        
-        try:
-            run_command_str(command, capture_output=False, check=True, want_sudo=True)
-            print_debug(f"Successfully activated spoofing for packet going to {self.victim_ip}:{self.victim_port} on queue {self.attack_queue_num}")
-        except CalledProcessError as e:
-            print_warning(f"Failed to activate spoofing: {e}")
-            return False
-        except Exception as e:
-            print_warning(f"An unexpected error occurred while activating spoofing: {e}")
-            return False
+        # Install NFQUEUE rule into dedicated chain with tag/TTL via ipset if available
+        suid = self.session_uid or "untagged"
+        # Refresh heartbeat so cleanup won't remove it
+        heartbeat_touch(suid)
+        set_name = ensure_nfqueue_rule_using_ipset(self.attack_queue_num, suid, anchor_chain="OUTPUT")
+        if set_name:
+            self._ipset_name = set_name
+            # Add victim port to set (auto-TTL)
+            try:
+                from utils.network.iptables import ipset_add_port
+                if self.victim_port:
+                    ipset_add_port(set_name, self.victim_port)
+            except Exception as e:
+                print_warning(f"Failed adding victim port to ipset {set_name}: {e}")
+        else:
+            # Fallback: direct rule in dedicated chain
+            if not add_nfqueue_rule_tagged(self.attack_queue_num, self.victim_port or 5060, suid, anchor_chain="OUTPUT"):
+                print_warning("Failed to add NFQUEUE rule (direct)")
+                return False
         try:
             print_debug("Trying to start spoofer")
             print_debug("New window: " + str(self.open_window))

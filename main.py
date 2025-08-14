@@ -248,11 +248,12 @@ def signal_handler(stormshadow_instance: 'StormShadow'):
 
 def main() -> int:
     """Main entry point."""
-    print_banner()
 
     # Elevate to root if needed before doing anything else
     ensure_root_or_reexec()
 
+    print_banner()
+    
     # Create argument parser
     parser = create_argument_parser()
     args, unknown_args = parser.parse_known_args()

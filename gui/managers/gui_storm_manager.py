@@ -15,6 +15,7 @@ from utils.config.config import Parameters
 from utils.core.stormshadow import StormShadow
 from utils.core.printing import print_info, print_error, print_debug, print_success
 from utils.attack.attack_modules_finder import find_attack_modules
+from utils.network.iptables import generate_suid
 
 
 @dataclass
@@ -36,15 +37,23 @@ class GUIStormManager:
     - Thread management for non-blocking operations
     - Status tracking and monitoring
     - Configuration management for GUI operations
+    - Shared SUID across all instances for proper cleanup
     """
     
-    def __init__(self):
+    def __init__(self, preserve_existing_rules: bool = False):
         """Initialize the GUI storm manager."""
         print_debug("Initializing GUI Storm Manager...")
         
         self.instances: Dict[str, StormShadowInstance] = {}
         self.available_attacks: Dict[str, Path] = {}
         self.status_callbacks: Dict[str, Callable[[str, str], None]] = {}
+        
+        # Generate a single shared SUID for all instances in this GUI session
+        self.shared_suid = generate_suid()
+        print_debug(f"GUI session SUID: {self.shared_suid}")
+        
+        # Store preservation setting for existing rules
+        self.preserve_existing_rules = preserve_existing_rules
         
         # Discover available attack modules
         self._discover_attacks()
@@ -64,6 +73,10 @@ class GUIStormManager:
         except Exception as e:
             print_error(f"Failed to discover attack modules: {e}")
             self.available_attacks = {}
+    
+    def get_shared_suid(self) -> str:
+        """Get the shared SUID for this GUI session."""
+        return self.shared_suid
     
     def get_available_attacks(self) -> Dict[str, Path]:
         """Get the list of available attack modules."""
@@ -114,8 +127,12 @@ class GUIStormManager:
                 if key not in attack_params:
                     attack_params[key] = value
             
-            # Create StormShadow instance
-            storm_instance = StormShadow(CLI_Args=attack_params)
+            # Create StormShadow instance with shared SUID
+            storm_instance = StormShadow(
+                CLI_Args=attack_params, 
+                session_uid=self.shared_suid,
+                preserve_existing_rules=self.preserve_existing_rules
+            )
             storm_instance.setup()
             
             # Create managed instance
@@ -165,8 +182,12 @@ class GUIStormManager:
                 for key, value in config_params.items():
                     lab_params[key] = value
             
-            # Create StormShadow instance
-            storm_instance = StormShadow(CLI_Args=lab_params)
+            # Create StormShadow instance with shared SUID
+            storm_instance = StormShadow(
+                CLI_Args=lab_params, 
+                session_uid=self.shared_suid,
+                preserve_existing_rules=self.preserve_existing_rules
+            )
             storm_instance.setup()
             
             # Create managed instance
@@ -392,11 +413,35 @@ class GUIStormManager:
     def cleanup(self):
         """Clean up all instances and resources."""
         print_info("Cleaning up GUI Storm Manager...")
+        print_info(f"Shared SUID for this session: {self.shared_suid}")
         
         # Stop all running instances
+        stopped_count = 0
         for instance_name in list(self.instances.keys()):
-            if self.instances[instance_name].is_running:
-                self.stop_instance(instance_name)
+            instance = self.instances[instance_name]
+            print_info(f"Processing instance {instance_name}, running: {instance.is_running}")
+            if instance.is_running:
+                print_info(f"Stopping instance {instance_name} with SUID: {instance.instance.session_uid}")
+                if self.stop_instance(instance_name):
+                    stopped_count += 1
+                else:
+                    print_error(f"Failed to stop instance {instance_name}")
+        
+        # Manual cleanup for all instances with this shared SUID
+        if stopped_count > 0 or self.instances:
+            print_info(f"Performing manual cleanup for shared SUID: {self.shared_suid}")
+            try:
+                from utils.network.iptables import remove_all_rules_for_suid, heartbeat_remove
+                # Remove heartbeat file first
+                heartbeat_remove(self.shared_suid)
+                # Remove all rules for the shared SUID
+                removed_count = remove_all_rules_for_suid(self.shared_suid)
+                if removed_count > 0:
+                    print_success(f"Manually cleaned up {removed_count} iptables rules for shared SUID {self.shared_suid}")
+                else:
+                    print_info(f"No rules found to clean up for shared SUID {self.shared_suid}")
+            except Exception as e:
+                print_error(f"Error during manual cleanup: {e}")
         
         # Clear all instances
         self.instances.clear()

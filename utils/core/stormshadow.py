@@ -148,7 +148,7 @@ class StormShadow:
         For CLI mode, this will stop the main application loop.
         """
         
-        print_info("Stopping features...")
+        print_info(f"Stopping StormShadow features for session {self.session_uid}...")
 
         if self.attack_on and hasattr(self, 'attack_manager') and self.attack_manager:
             try:
@@ -167,13 +167,17 @@ class StormShadow:
         self._stop_heartbeat()
         try:
             # Remove heartbeat file first to prevent the cleanup logic from thinking this session is active
+            print_info(f"Removing heartbeat file for session {self.session_uid}")
             heartbeat_remove(self.session_uid)
             # Remove ALL iptables rules for this session (including anchor jumps)
+            print_info(f"Cleaning up iptables rules for session {self.session_uid}")
             removed_count = remove_all_rules_for_suid(self.session_uid)
             if removed_count > 0:
-                print_info(f"Cleaned up {removed_count} iptables rules for session {self.session_uid}")
+                print_success(f"Cleaned up {removed_count} iptables rules for session {self.session_uid}")
+            else:
+                print_info(f"No rules found to clean up for session {self.session_uid}")
         except Exception as e:
-            print_debug(f"Error during rule cleanup: {e}")
+            print_error(f"Error during rule cleanup for session {self.session_uid}: {e}")
 
     def _start_heartbeat(self) -> None:
         """Start heartbeat thread to keep session alive for iptables rule protection."""

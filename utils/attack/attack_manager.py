@@ -7,11 +7,11 @@ working with attack modules and a simple discovery mechanism.
 
 from pathlib import Path
 from typing import Dict, Optional
-from ..core.printing import print_debug, print_error, print_in_dev, print_info, print_success, print_warning
-from ..config.config import Config
-from .attack_modules_finder import find_attack_modules
-from .AttackSession import AttackSession, build_attack_from_module
-from .attack_enums import AttackStatus
+from utils.core.printing import print_debug, print_error, print_in_dev, print_info, print_success, print_warning
+from utils.config.config import Config
+from utils.attack.attack_modules_finder import find_attack_modules
+from utils.attack.AttackSession import AttackSession, build_attack_from_module
+from utils.attack.attack_enums import AttackStatus
 
 class AttackManager:
     """
@@ -23,7 +23,7 @@ class AttackManager:
     - Coordination with other system components
     """
 
-    def __init__(self, config: Config, attack_modules_path: Path, spoofing_enabled: bool, return_path_enabled: bool, session_uid: Optional[str] = None) -> None:
+    def __init__(self, config: Config, attack_modules_path: Path, spoofing_enabled: bool, return_path_enabled: bool, session_uid: Optional[str] = None, dry_run: bool = False) -> None:
         """
         Initialize attack manager.
         
@@ -38,7 +38,7 @@ class AttackManager:
         self.available_modules: Dict[str,Path] = find_attack_modules(self.attack_modules_folder)
         self.spoofing_enabled = spoofing_enabled
         self.return_path_enabled = return_path_enabled
-
+        self.dry_run = dry_run
         print_debug(f"Initializing attack manager with configuration: {config}")
 
         print_success("Attack manager initialized")
@@ -88,7 +88,7 @@ class AttackManager:
             raise KeyError(f"Attack module {module_name} not found in available modules.")
         
         # Build the attack from the module path
-        self.current_attack = build_attack_from_module(module_path, self.config.parameters, enable_spoofing=self.spoofing_enabled, session_uid=self.session_uid)
+        self.current_attack = build_attack_from_module(module_path, self.config.parameters, enable_spoofing=self.spoofing_enabled, session_uid=self.session_uid, dry_run=self.dry_run)
 
         return True  # Return True if the module was loaded successfully
 
@@ -108,7 +108,7 @@ class AttackManager:
             if self.current_attack.get_status() == AttackStatus.RUNNING:
                 print_warning("Attack is already running, stopping it before starting a new one.")
                 self.current_attack.stop()
-            if self.current_attack.get_status() == AttackStatus.STOPPED:
+            if self.current_attack.get_status() == AttackStatus.STOPPED and self.current_attack.is_resumable:
                 print_info("Resuming attack...")
                 self.current_attack.resume()
             else:

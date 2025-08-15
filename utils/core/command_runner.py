@@ -10,9 +10,9 @@ from utils.core.console_window import ConsoleWindow
 from utils.core.printing import print_debug, print_in_dev, print_warning
 
 def _prefix_sudo_argv(argv: List[str],
-                      want_sudo: bool,
-                      non_interactive: bool = True,
-                      preserve_env: bool = False) -> List[str]:
+                    want_sudo: bool,
+                    non_interactive: bool = True,
+                    preserve_env: bool = False) -> List[str]:
     """Prefix argv with sudo when requested & available; never double-add."""
     if not want_sudo or os.geteuid() == 0:
         return argv
@@ -38,6 +38,7 @@ def run_command(
     capture_output: bool = True,
     check: bool = True,
     text: bool = True,
+    dry_run: bool = False
 ) -> subprocess.CompletedProcess[str]:
     """
     Run a command as a list of arguments and return a CompletedProcess result.
@@ -88,7 +89,9 @@ def run_command(
         non_interactive=sudo_non_interactive,
         preserve_env=sudo_preserve_env,
     )
-
+    if dry_run:
+        print_debug("Dry run enabled, not actually executing.")
+        raise RuntimeError("Dry run enabled, not actually executing.")
     return subprocess.run(
         final_argv,
         cwd=cwd,
@@ -109,6 +112,7 @@ def run_command_str(
     capture_output: bool = True,
     check: bool = True,
     text: bool = True,
+    dry_run: bool = False
 ) -> subprocess.CompletedProcess[str]:
     """
     Convenience wrapper when you have a simple string command (no pipes, &&, etc.).
@@ -125,6 +129,7 @@ def run_command_str(
         capture_output=capture_output,
         check=check,
         text=text,
+        dry_run=dry_run
     )
 
 def run_process(argv: List[str],
@@ -137,7 +142,8 @@ def run_process(argv: List[str],
                 interactive: bool = False,
                 window_title: Optional[str] = None,
                 sudo_preserve_env: bool = False,
-                sudo_non_interactive: bool = True) -> subprocess.Popen[bytes]:
+                sudo_non_interactive: bool = True,
+                dry_run: bool = False) -> subprocess.Popen[bytes]:
     """
     Run a command (argv) robustly. Creates a new process group so you can signal it later.
 
@@ -170,6 +176,9 @@ def run_process(argv: List[str],
         inner = "exec " + " ".join(shlex.quote(a) for a in final_argv)
         cmd = ['gnome-terminal', '--', 'bash', '-lc', inner]
         print_in_dev(f"Running in new terminal: {cmd}")
+        if dry_run:
+            print_debug("Dry run enabled, not actually executing.")
+            raise RuntimeError("Dry run enabled, not actually executing.")
         return subprocess.Popen(cmd, cwd=cwd, env=env, start_new_session=True)
 
     if open_window:
@@ -200,21 +209,25 @@ def run_process(argv: List[str],
 
     # Normal, non-windowed process
     print_debug(f"Running: {final_argv}")
+    if dry_run:
+        print_debug("Dry run enabled, not actually executing.")
+        raise RuntimeError("Dry run enabled, not actually executing.")
     return subprocess.Popen(final_argv, cwd=cwd, env=env, start_new_session=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 def run_python(*,
-               module: Optional[str] = None,
-               script: Optional[str] = None,
-               args: Sequence[str] = (),
-               cwd: Optional[str] = None,
-               env: Optional[Dict[str, str]] = None,
-               want_sudo: bool = False,
-               new_terminal: bool = False,
-               open_window: bool = False,
-               window_title: Optional[str] = None,
-               interactive: bool = False,
-               sudo_preserve_env: bool = True,
-               sudo_non_interactive: bool = True):
+            module: Optional[str] = None,
+            script: Optional[str] = None,
+            args: Sequence[str] = (),
+            cwd: Optional[str] = None,
+            env: Optional[Dict[str, str]] = None,
+            want_sudo: bool = False,
+            new_terminal: bool = False,
+            open_window: bool = False,
+            window_title: Optional[str] = None,
+            interactive: bool = False,
+            sudo_preserve_env: bool = True,
+            sudo_non_interactive: bool = True,
+            dry_run: bool = False):
     """
     Launch Python using the SAME interpreter as this process.
 
@@ -241,4 +254,5 @@ def run_python(*,
         interactive=interactive,
         sudo_preserve_env=sudo_preserve_env,
         sudo_non_interactive=sudo_non_interactive,
+        dry_run=dry_run
     )

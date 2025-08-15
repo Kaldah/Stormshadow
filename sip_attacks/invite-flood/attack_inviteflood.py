@@ -97,6 +97,12 @@ class InviteFloodAttack(AttackInterface):
 
     def run(self) -> None:
         print_info("Running InviteFlood attack")
+        
+        if self.dry_run:
+            print_info("Dry run mode: would execute inviteflood command")
+            print_info(f"Would attack target: {self.target_ip}:{self.target_port}")
+            return
+            
         # Build the inviteflood command with required and optional arguments
         try:
             command = (
@@ -142,6 +148,7 @@ class InviteFloodAttack(AttackInterface):
         if self._spoofer_params and not self.spoofer:
             self.spoofer = SipPacketSpoofer(
                 session_uid=getattr(self, 'session_uid', None),
+                dry_run=getattr(self, 'dry_run', False),
                 **self._spoofer_params
             )
         

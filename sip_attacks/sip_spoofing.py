@@ -4,7 +4,7 @@ from subprocess import CalledProcessError, Popen
 from typing import Optional
 from ipaddress import ip_network, IPv4Network, IPv6Network
 from utils.core.command_runner import run_command_str, run_python
-from utils.core.printing import print_debug, print_error, print_success, print_warning
+from utils.core.printing import print_debug, print_error, print_success, print_warning, print_info
 from netfilterqueue import NetfilterQueue
 import socket
 from utils.network.iptables import (
@@ -43,12 +43,14 @@ class SipPacketSpoofer:
                  victim_ip: str = "",
                  attacker_port: int = 0,
                  open_window: bool = False,
-                 session_uid: str | None = None):
+                 session_uid: str | None = None,
+                 dry_run: bool = False):
         self.spoofed_subnet : IPv4Network | IPv6Network = ip_network(spoofed_subnet)  # Format : xxx.xxx.0/24
         self.attack_queue_num : int = attack_queue_num
         self.attacker_port : int = attacker_port
         self.victim_ip : str = victim_ip
         self.victim_port : int = victim_port
+        self.dry_run : bool = dry_run
 
         self.next_ip_number: int = 0
         self.spoofed_ips : list[str] = [str(ip) for ip in self.spoofed_subnet.hosts()]  # List of spoofed IPs in the subnet
@@ -106,6 +108,10 @@ class SipPacketSpoofer:
         Returns:
             bool: True if the rule was successfully removed, False otherwise.
         """
+        if self.dry_run:
+            print_info("Dry run mode: would stop spoofing and cleanup iptables rules")
+            return True
+            
         source_port = f"--sport {self.attacker_port}" if self.attacker_port != 0 else ""
         dst_ip = f"-d {self.victim_ip}" if self.victim_ip != "" else ""
         dst_port = f"--dport {self.victim_port}" if self.victim_port != 0 else ""
@@ -187,19 +193,24 @@ class SipPacketSpoofer:
         suid = self.session_uid or "untagged"
         # Refresh heartbeat so cleanup won't remove it
         heartbeat_touch(suid)
-        set_name = ensure_nfqueue_rule_using_ipset(self.attack_queue_num, suid, anchor_chain="OUTPUT")
+        
+        if self.dry_run:
+            print_info("Dry run mode: would set up NFQUEUE rules and start spoofing process")
+            return True
+        
+        set_name = ensure_nfqueue_rule_using_ipset(self.attack_queue_num, suid, anchor_chain="OUTPUT", dry_run=self.dry_run)
         if set_name:
             self._ipset_name = set_name
             # Add victim port to set (auto-TTL)
             try:
                 from utils.network.iptables import ipset_add_port
                 if self.victim_port:
-                    ipset_add_port(set_name, self.victim_port)
+                    ipset_add_port(set_name, self.victim_port, dry_run=self.dry_run)
             except Exception as e:
                 print_warning(f"Failed adding victim port to ipset {set_name}: {e}")
         else:
             # Fallback: direct rule in dedicated chain
-            if not add_nfqueue_rule_tagged(self.attack_queue_num, self.victim_port or 5060, suid, anchor_chain="OUTPUT"):
+            if not add_nfqueue_rule_tagged(self.attack_queue_num, self.victim_port or 5060, suid, anchor_chain="OUTPUT", dry_run=self.dry_run):
                 print_warning("Failed to add NFQUEUE rule (direct)")
                 return False
         try:
@@ -219,10 +230,12 @@ class SipPacketSpoofer:
                 open_window=self.open_window,
                 window_title="SIP Spoofer",
                 interactive=False,
+                dry_run=self.dry_run,
             )
 
             # We wait for the spoofer to be ready
-            wait_ready_signal(self.attack_queue_num)
+            if not self.dry_run:
+                wait_ready_signal(self.attack_queue_num)
             return True
         except Exception as e:
             print_warning(f"Failed to bind spoofing function to queue {self.attack_queue_num}: {e}")

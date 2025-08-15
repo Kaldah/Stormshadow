@@ -22,17 +22,21 @@ class LabManager:
     - Coordination with other system components
     """
 
-    def __init__(self, config: Config, keep_lab_open: bool = False, gui_mode: bool = False) -> None:
+    def __init__(self, config: Config, keep_lab_open: bool = False, gui_mode: bool = False, dry_run: bool = False) -> None:
         """
         Initialize lab manager.
         
         Args:
             config: Lab configuration
+            keep_lab_open: Whether to keep lab open after stopping
+            gui_mode: Whether running in GUI mode
+            dry_run: Whether to run in dry-run mode
         """
         self.config = config
         self.container_process = None
         self.container_name = "sip-victim"
         self.docker_image = "asterisk-sip-server"
+        self.dry_run = dry_run
         
         # Get the project root directory (assuming lab manager is in utils/)
         self.project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -46,6 +50,10 @@ class LabManager:
         """
         Clean up any existing Docker container.
         """
+        if self.dry_run:
+            print_info("Dry run mode: would clean up existing containers")
+            return
+            
         try:
             print_info("Cleaning up existing containers...")
             
@@ -78,6 +86,10 @@ class LabManager:
         Returns:
             bool: True if image exists or was built successfully, False otherwise
         """
+        if self.dry_run:
+            print_info("Dry run mode: would check/build Docker image")
+            return True
+            
         try:
             # Check if image exists
             result = run_command_str(
@@ -117,6 +129,10 @@ class LabManager:
         This method initializes and starts the SIP lab Docker container.
         """
         print_info("Starting lab manager...")
+        
+        if self.dry_run:
+            print_info("Dry run mode: would start lab Docker container")
+            return
         
         try:
             # Clean up any existing containers
@@ -175,6 +191,10 @@ class LabManager:
         """
         print_info("Stopping lab manager...")
         
+        if self.dry_run:
+            print_info("Dry run mode: would stop lab Docker container")
+            return
+        
         try:
             # Terminate the container process if it exists
             if self.container_process and not self.keep_lab_open:
@@ -204,8 +224,12 @@ class LabManager:
         Check if the lab is running.
         
         Returns:
-            bool: True if lab is running, False otherwise
+            str: Status string of the container
         """
+        if self.dry_run:
+            print_info("Dry run mode: would check lab status")
+            return "Dry run mode"
+            
         try:
             result = run_command_str(
                 f"docker ps --filter \"name={self.container_name}\" --format '{{{{.Status}}}}'",

@@ -178,7 +178,7 @@ class GUILabManager:
 
         try:
             # Create lab manager with GUI mode enabled
-            self.lab_manager = LabManager(self.config, gui_mode=True)
+            self.lab_manager = LabManager(self.config, gui_mode=True, dry_run=False)
 
             # Start in a separate thread to avoid blocking the GUI
             def start_thread():

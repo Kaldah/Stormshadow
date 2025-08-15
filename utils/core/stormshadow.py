@@ -10,10 +10,10 @@ Author: Corentin COUSTY
 from pathlib import Path
 from typing import Optional
 
-from ..config.config import Config, ConfigType, Parameters
+from utils.config.config import Config, ConfigType, Parameters
 from utils.attack.attack_manager import AttackManager
 from utils.config.config_manager import ConfigManager
-from .printing import print_info, print_warning, print_error, print_success, print_debug
+from utils.core.printing import print_info, print_warning, print_error, print_success, print_debug
 from utils.network.iptables import cleanup_stale_rules, generate_suid, heartbeat_touch, heartbeat_remove, remove_all_rules_for_suid
 import threading
 from utils.lab_manager import LabManager
@@ -89,7 +89,7 @@ class StormShadow:
         if self.lab_on:
             try :
                 print_debug("Lab mode is enabled, initializing lab manager...")
-                self.lab_manager = LabManager(self.configManager.get_config(ConfigType.LAB))
+                self.lab_manager = LabManager(self.configManager.get_config(ConfigType.LAB), dry_run=self.dry_run)
                 print_success("Lab mode is enabled.")
             except Exception as e:
                 print_error(f"Failed to initialize lab manager: {e}")
@@ -102,10 +102,10 @@ class StormShadow:
             try:
                 print_debug("Attack mode is enabled, initializing attack manager...")
                 # Use absolute path relative to the current file location
-                from .system_utils import get_project_root
+                from utils.core.system_utils import get_project_root
                 project_root = get_project_root()
                 attack_modules_path = project_root / "sip_attacks"
-                self.attack_manager = AttackManager(self.configManager.get_config(ConfigType.ATTACK), attack_modules_path, spoofing_enabled=self.spoofing_on, return_path_enabled=self.return_path_on, session_uid=self.session_uid)
+                self.attack_manager = AttackManager(self.configManager.get_config(ConfigType.ATTACK), attack_modules_path, spoofing_enabled=self.spoofing_on, return_path_enabled=self.return_path_on, session_uid=self.session_uid, dry_run=self.dry_run)
                 print_success("Attack mode is enabled.")
             except Exception as e:
                 print_error(f"Failed to initialize attack manager: {e}")

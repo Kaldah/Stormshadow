@@ -6,7 +6,7 @@ from typing import Optional, Type
 from utils.config.config import Parameters
 from utils.core.printing import print_debug, print_error, print_in_dev, print_info, print_success, print_warning
 from utils.interfaces.attack_interface import AttackInterface, create_attack_instance
-from .attack_enums import AttackProtocol, AttackStatus, AttackType
+from utils.attack.attack_enums import AttackProtocol, AttackStatus, AttackType
 from utils.attack.attack_modules_finder import find_attack_main_class, check_attack_module_structure
 from utils.network.iptables import generate_suid, remove_rules_for_suid
 
@@ -16,39 +16,49 @@ class AttackSession:
     Base class for all attack modules.
     """
 
-    def __init__(self, name: str, main_attack: AttackInterface, enable_spoofing: bool, session_uid: Optional[str] = None) -> None:
+    def __init__(self, name: str, main_attack: AttackInterface, enable_spoofing: bool, session_uid: Optional[str] = None, dry_run: bool = False) -> None:
         self.name = name
         self.protocol = AttackProtocol.SIP
 
         self.main_attack : AttackInterface = main_attack  # Instance of the attack interface
-
+        self.dry_run = dry_run  # Whether dry run is enabled or not
         self.status = AttackStatus.INITIALIZED  # Status of the attack module
-        self.own_spoofing = main_attack.spoofing_implemented  # Whether the attack module is already spoofing or not
         self.enable_spoofing = enable_spoofing  # Whether spoofing is enabled or not
 
         # Use provided session UID or generate our own
         self.suid: str = session_uid or generate_suid()
         self.main_attack.set_session_uid(self.suid)
+        self.is_resumable = self.main_attack.resume_implemented  # Whether the attack module can be resumed or not
+        self.use_default_spoofing = not self.main_attack.spoofing_implemented  # Whether to use default spoofing or module spoofing
 
     def start(self) -> None:
         """
         Start the attack.
         """
-        if self.main_attack.dry_run:
+        
+        print_info(f"Starting attack: {self.name}")
+        self.status = AttackStatus.RUNNING
+        # Implement logic to start the attack
+
+        if self.dry_run:
+            if self.enable_spoofing:
+                print_info("Spoofing is enabled, spoofing would be started.")
             print_info("Running in dry-run mode, no actual attack will be performed.")
             if not self.main_attack.dry_run_implemented:
                 print_warning("Dry-run mode is not implemented for this attack module\nModule content not available in dry-run.")
                 return
             else:
-                print_info("Dry-run mode is implemented, proceeding with dry-run.")
+                print_info(f"Dry-run mode is implemented, proceeding with dry-run for {self.name}.")
                 self.main_attack.dry_run = True
-        print_info(f"Starting attack: {self.name}")
-        self.status = AttackStatus.RUNNING
-        # Implement logic to start the attack
-        print_in_dev(f"Spooging state is set to: {self.enable_spoofing}")
         if self.enable_spoofing:
             print_info("Spoofing is enabled, starting spoofing...")
-            self.main_attack.start_spoofing()
+            if self.use_default_spoofing:
+                print_info("Using default spoofing...")
+                print_in_dev("Default spoofing not implemented yet, using module spoofing instead.")
+                self.main_attack.start_spoofing()
+            else:
+                print_info("Using attack module own spoofing...")
+                self.main_attack.start_spoofing()
         self.main_attack.run()
         print_success(f"Attack {self.name} started successfully.")
 
@@ -59,22 +69,27 @@ class AttackSession:
         print_info(f"Stopping attack: {self.name}")
         # Implement logic to stop the attack
         try:
-            if self.main_attack.dry_run:
+            if self.dry_run:
                 if not self.main_attack.dry_run_implemented:
-                    print_warning("Dry-run mode is enabled, no actual attack will be stopped.")
+                    if self.enable_spoofing:
+                        print_info("Spoofing is enabled, spoofing would be stopped.")
+                    print_info("Dry-run mode is enabled, no actual attack will be stopped.")
                     return
                 else:
                     print_info("Dry-run mode is implemented, proceeding with stopping the (fake) attack.")
-            
             self.main_attack.stop()
             self.status = AttackStatus.STOPPED
             print_info(f"Attack {self.name} stopped successfully.")
             if self.enable_spoofing:
-                self.main_attack.stop_spoofing()
+                if self.use_default_spoofing:
+                    print_in_dev("Default spoofing not implemented yet, stopping module spoofing.")
+                    self.main_attack.stop_spoofing()
+                else:
+                    self.main_attack.stop_spoofing()
             # Best-effort cleanup of any rules with this session SUID
             try:
-                remove_rules_for_suid(self.suid)
-                remove_rules_for_suid(self.suid, table="nat")
+                remove_rules_for_suid(self.suid, dry_run=self.dry_run)
+                remove_rules_for_suid(self.suid, table="nat", dry_run=self.dry_run)
             except Exception:
                 pass
         except Exception as e:
@@ -177,14 +192,17 @@ def load_main_attack(py_file: Path) -> Optional[Type[AttackInterface]]:
         print_debug(f"Failed to import attack module from {py_file} : {e}")
         return None
 
-def build_attack_from_module(module: Path, attack_params: Parameters, enable_spoofing: bool, session_uid: Optional[str] = None, open_window: bool = False) -> Optional[AttackSession]:
+def build_attack_from_module(module: Path, attack_params: Parameters, enable_spoofing: bool, session_uid: Optional[str] = None, open_window: bool = False, dry_run: bool = False) -> Optional[AttackSession]:
     """
     Build an attack instance from a module path.
     
     Args:
         module: Path to the attack module.
         attack_params: Parameters for the attack instance.
+        enable_spoofing: Whether to enable spoofing for this attack
         session_uid: Session unique ID to use for this attack
+        open_window: Whether to open a window for this attack
+        dry_run: Whether to run in dry-run mode
 
     Returns:
         An instance of the attack module.
@@ -226,7 +244,7 @@ def build_attack_from_module(module: Path, attack_params: Parameters, enable_spo
             main_attack.set_session_uid(session_uid)
         
         # Create an instance of the attack session
-        attack_session = AttackSession(name=main_attack.attack_name, main_attack=main_attack, enable_spoofing=enable_spoofing, session_uid=session_uid)
+        attack_session = AttackSession(name=main_attack.attack_name, main_attack=main_attack, enable_spoofing=enable_spoofing, session_uid=session_uid, dry_run=dry_run)
         print_info(f"Attack session created successfully: {attack_session.get_name()}")
         return attack_session
     except ImportError as e:

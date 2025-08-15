@@ -13,7 +13,7 @@ from typing import Optional
 from utils.config.config import Config, ConfigType, Parameters
 from utils.attack.attack_manager import AttackManager
 from utils.config.config_manager import ConfigManager
-from utils.core.printing import print_info, print_warning, print_error, print_success, print_debug
+from utils.core.logs import print_info, print_warning, print_error, print_success, print_debug, set_verbosity, use_log_file
 from utils.network.iptables import cleanup_stale_rules, generate_suid, heartbeat_touch, heartbeat_remove, remove_all_rules_for_suid
 import threading
 from utils.lab_manager import LabManager
@@ -24,6 +24,10 @@ class StormShadow:
     """
 
     def __init__(self, CLI_Args: Parameters, default_config_path: Optional[Path] = None, session_uid: Optional[str] = None, preserve_existing_rules: bool = False) -> None:
+        # Setup logging first, before any other operations
+        verbosity = CLI_Args.get("verbosity", "info") if CLI_Args else "info"
+        set_verbosity(verbosity)
+        
         print_info("Initializing StormShadow...")
         
         # Generate or use provided session UID for this StormShadow instance
@@ -53,6 +57,13 @@ class StormShadow:
             print_warning("Dry run mode is enabled. No real attacks and no features will be executed.")
             print_warning("This is useful for testing configurations without affecting real systems.")
 
+        # Configure log file if enabled
+        self.log_file_on = self.parameters.get("log_file", path=["enabled"])  # Enable logging to a file
+        if self.log_file_on:
+            log_file_path = self.parameters.get("log_file", "stormshadow.log", path=["path"])
+            print_debug(f"Enabling log file: {log_file_path}")
+            use_log_file(str(log_file_path))
+
         self.attack_on = self.parameters.get("attack", path=["enabled"]) # Enable attack mode by default
         self.custom_payload_on = self.parameters.get("custom_payload", path=["enabled"])  # Allow the use of a custom payload for some attacks
         self.spoofing_on = self.parameters.get("spoofing", path=["enabled"])  # Enable spoofing by default
@@ -63,7 +74,6 @@ class StormShadow:
 
         # Other features
         self.metrics_on = self.parameters.get("metrics", path=["enabled"])  # Enable metrics collection by default
-        self.log_file_on = self.parameters.get("log_file", path=["enabled"])  # Enable logging to a file
         self.metrics_config : Config = self.configManager.get_config(ConfigType.METRICS)
         self.defense_config : Config = self.configManager.get_config(ConfigType.DEFENSE)
         self.gui_config : Config = self.configManager.get_config(ConfigType.GUI)

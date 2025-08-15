@@ -13,7 +13,7 @@ from typing import Dict, Any, Optional
 
 from utils.network.iptables import get_current_iptables_queue_num
 
-from ..core.printing import print_debug, print_success, print_warning
+from ..core.logs import print_debug, print_success, print_warning
 
 from ..core.system_utils import get_interface, get_interface_ip
 

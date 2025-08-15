@@ -4,7 +4,7 @@ from subprocess import CalledProcessError, Popen
 from typing import Optional
 from ipaddress import ip_network, IPv4Network, IPv6Network
 from utils.core.command_runner import run_command_str, run_python
-from utils.core.printing import print_debug, print_error, print_success, print_warning, print_info
+from utils.core.logs import print_debug, print_error, print_success, print_warning, print_info
 from netfilterqueue import NetfilterQueue
 import socket
 from utils.network.iptables import (

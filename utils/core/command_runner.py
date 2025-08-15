@@ -7,7 +7,7 @@ import threading
 
 from typing import List, Optional, Dict, Sequence
 from utils.core.console_window import ConsoleWindow
-from utils.core.printing import print_debug, print_in_dev, print_warning
+from utils.core.logs import print_debug, print_in_dev, print_warning
 
 def _prefix_sudo_argv(argv: List[str],
                     want_sudo: bool,

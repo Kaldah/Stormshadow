@@ -5,7 +5,7 @@ from typing import Optional
 from netfilterqueue import NetfilterQueue, Packet
 from ipaddress import ip_network, IPv4Network, IPv6Network
 
-from utils.core.printing import print_debug, print_success, print_warning
+from utils.core.logs import print_debug, print_success, print_warning
 from scapy.packet import Packet as ScapyPacket
 from scapy.layers.inet import IP, UDP
 import socket

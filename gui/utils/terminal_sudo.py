@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 from typing import List
-from utils.core.printing import print_info, print_error
+from utils.core.logs import print_info, print_error
 
 
 def create_sudo_script(commands: List[str], description: str = "StormShadow Operation") -> Path:

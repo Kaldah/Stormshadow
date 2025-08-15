@@ -3,7 +3,7 @@
 from typing import List, Optional
 from pathlib import Path
 from utils.attack.attack_enums import AttackProtocol, AttackType
-from utils.core.printing import print_info
+from utils.core.logs import print_info
 from utils.interfaces.attack_interface import AttackInterface
 
 from utils.registry.metadata import ModuleInfo

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Optional
 from utils.attack.attack_enums import AttackProtocol, AttackType
 from utils.config.config import Parameters
-from utils.core.printing import print_error, print_info
+from utils.core.logs import print_error, print_info
 from utils.interfaces.attack_interface import AttackInterface
 from utils.registry.metadata import ModuleInfo
 from utils.core.command_runner import run_command_str

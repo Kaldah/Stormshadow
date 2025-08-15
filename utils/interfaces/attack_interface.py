@@ -10,7 +10,7 @@ from utils.config.config import Parameters
 from utils.attack.attack_enums import AttackProtocol, AttackType
 import inspect
 
-from utils.core.printing import print_debug, print_in_dev, print_warning
+from utils.core.logs import print_debug, print_in_dev, print_warning
 from utils.registry.metadata import ModuleInfo
 
 class AttackInterface(ABC):

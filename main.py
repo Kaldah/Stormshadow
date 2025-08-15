@@ -21,7 +21,7 @@ from typing import Optional
 from types import FrameType
 
 from utils.config.config import Parameters
-from utils.core.printing import print_in_dev, print_info
+from utils.core.logs import print_in_dev, print_info
 from utils.core.stormshadow import StormShadow
 from gui import StormShadowGUI
 import shutil

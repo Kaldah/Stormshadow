@@ -3,7 +3,7 @@ from importlib.util import module_from_spec, spec_from_file_location
 from types import ModuleType
 from typing import Dict, Optional, Type
 
-from utils.core.printing import print_debug, print_in_dev, print_warning
+from utils.core.logs import print_debug, print_in_dev, print_warning
 from utils.interfaces.attack_interface import AttackInterface
 
 def find_attack_main_class(module: ModuleType) -> Optional[Type[AttackInterface]]:

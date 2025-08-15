@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Any, cast, Optional, override
 from enum import Enum
-from ..core.printing import print_debug, print_info, print_warning
+from ..core.logs import print_debug, print_info, print_warning
 
 class ConfigType(Enum):
     DEFAULT = "default"

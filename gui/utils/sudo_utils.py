@@ -12,7 +12,7 @@ import tkinter as tk
 from tkinter import messagebox
 from pathlib import Path
 from typing import Optional, List
-from utils.core.printing import print_info, print_error, print_warning
+from utils.core.logs import print_info, print_error, print_warning
 
 
 def check_sudo_available() -> bool:

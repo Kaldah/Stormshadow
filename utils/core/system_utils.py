@@ -15,7 +15,7 @@ from typing import Optional, Dict
 from pathlib import Path
 import netifaces
 
-from .printing import print_warning
+from .logs import print_warning
 
 def get_project_root() -> Path:
     """

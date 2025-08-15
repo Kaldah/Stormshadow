@@ -7,7 +7,7 @@ working with attack modules and a simple discovery mechanism.
 
 from pathlib import Path
 from typing import Dict, Optional
-from utils.core.printing import print_debug, print_error, print_in_dev, print_info, print_success, print_warning
+from utils.core.logs import print_debug, print_error, print_in_dev, print_info, print_success, print_warning
 from utils.config.config import Config
 from utils.attack.attack_modules_finder import find_attack_modules
 from utils.attack.AttackSession import AttackSession, build_attack_from_module

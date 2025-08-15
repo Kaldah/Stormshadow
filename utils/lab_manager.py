@@ -8,7 +8,7 @@ Docker containers and lab infrastructure.
 import os
 import time
 
-from .core.printing import print_info, print_error, print_debug
+from .core.logs import print_info, print_error, print_debug
 from .config.config import Config
 from utils.core.command_runner import run_command_str, run_process
 

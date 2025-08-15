@@ -11,7 +11,7 @@ License: Educational Use Only
 
 from gui.managers.gui_storm_manager import GUIStormManager
 from gui.components.main_window import MainWindow
-from utils.core.printing import print_info, print_error, print_success
+from utils.core.logs import print_info, print_error, print_success
 from utils.config.config import Parameters
 import sys
 import tkinter as tk

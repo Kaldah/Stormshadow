@@ -5,7 +5,7 @@ import uuid
 import subprocess
 from typing import List, Optional, Tuple
 
-from utils.core.printing import print_debug, print_info, print_warning
+from utils.core.logs import print_debug, print_info, print_warning
 from utils.core.command_runner import run_command_str
 
 def get_current_iptables_queue_num() -> int:

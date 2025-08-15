@@ -7,7 +7,7 @@ with proper sudo handling using the custom command runner.
 
 import subprocess
 from typing import List, Dict, Optional, Any
-from utils.core.printing import print_info, print_error, print_warning
+from utils.core.logs import print_info, print_error, print_warning
 
 
 def run_gui_command(

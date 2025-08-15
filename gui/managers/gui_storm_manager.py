@@ -13,7 +13,7 @@ import subprocess
 
 from utils.config.config import Parameters
 from utils.core.stormshadow import StormShadow
-from utils.core.printing import print_info, print_error, print_debug, print_success
+from utils.core.logs import print_info, print_error, print_debug, print_success
 from utils.attack.attack_modules_finder import find_attack_modules
 from utils.network.iptables import generate_suid
 

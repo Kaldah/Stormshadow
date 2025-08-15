@@ -4,7 +4,7 @@ from types import ModuleType
 from typing import Optional, Type
 
 from utils.config.config import Parameters
-from utils.core.printing import print_debug, print_error, print_in_dev, print_info, print_success, print_warning
+from utils.core.logs import print_debug, print_error, print_in_dev, print_info, print_success, print_warning
 from utils.interfaces.attack_interface import AttackInterface, create_attack_instance
 from utils.attack.attack_enums import AttackProtocol, AttackStatus, AttackType
 from utils.attack.attack_modules_finder import find_attack_main_class, check_attack_module_structure

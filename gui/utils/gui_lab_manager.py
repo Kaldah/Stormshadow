@@ -14,7 +14,7 @@ from typing import Optional, Callable
 
 from utils.lab_manager import LabManager
 from utils.config.config import Config
-from utils.core.printing import print_info, print_error, print_warning, print_success
+from utils.core.logs import print_info, print_error, print_warning, print_success
 
 
 class GUILabManager:

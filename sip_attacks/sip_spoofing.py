@@ -44,13 +44,15 @@ class SipPacketSpoofer:
                  attacker_port: int = 0,
                  open_window: bool = False,
                  session_uid: str | None = None,
-                 dry_run: bool = False):
+                 dry_run: bool = False,
+                 verbosity: str = "info"):
         self.spoofed_subnet : IPv4Network | IPv6Network = ip_network(spoofed_subnet)  # Format : xxx.xxx.0/24
         self.attack_queue_num : int = attack_queue_num
         self.attacker_port : int = attacker_port
         self.victim_ip : str = victim_ip
         self.victim_port : int = victim_port
         self.dry_run : bool = dry_run
+        self.verbosity : str = verbosity
 
         self.next_ip_number: int = 0
         self.spoofed_ips : list[str] = [str(ip) for ip in self.spoofed_subnet.hosts()]  # List of spoofed IPs in the subnet
@@ -224,6 +226,7 @@ class SipPacketSpoofer:
                     self.victim_ip,
                     str(self.victim_port),
                     str(self.attacker_port),
+                    self.verbosity,  # Add verbosity argument
                 ],
                 want_sudo=True,
                 new_terminal=False,

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Optional
 from utils.attack.attack_enums import AttackProtocol, AttackType
 from utils.config.config import Parameters
-from utils.core.logs import print_error, print_info
+from utils.core.logs import print_error, print_info, get_logger
 from utils.interfaces.attack_interface import AttackInterface
 from utils.registry.metadata import ModuleInfo
 from utils.core.command_runner import run_command_str
@@ -78,6 +78,7 @@ class InviteFloodAttack(AttackInterface):
             'victim_ip': target_ip,
             'attacker_port': source_port,
             'open_window': open_window,
+            'verbosity': self._get_current_verbosity(),  # Add current verbosity level
         }) if spoofing_subnet else None
         self.spoofer : Optional[SipPacketSpoofer] = None
 
@@ -85,6 +86,22 @@ class InviteFloodAttack(AttackInterface):
         # Print the initialization message
 
         print_info(f"InviteFlood attack initialized with target: {target_ip}:{target_port}")
+
+    def _get_current_verbosity(self) -> str:
+        """Get the current logging verbosity level."""
+        logger = get_logger()
+        level = logger.level
+        # Map numeric levels back to string names
+        level_map = {
+            10: "debug",
+            15: "dev", 
+            20: "info",
+            25: "success",
+            30: "warning",
+            40: "error",
+            50: "critical"
+        }
+        return level_map.get(level, "info")
 
     def cleanup(self) -> None:
         print_info("Cleaning up InviteFlood attack resources")

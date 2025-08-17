@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from subprocess import Popen
-from typing import Optional, Sequence, Dict
+from typing import Optional, Sequence, Dict, Union
 import os
 import platform
-import re
 import tkinter as tk
 from tkinter import scrolledtext, ttk
+
+# Type aliases to fix Pylance Widget issues
+TkWidget = Union[tk.Widget, tk.Tk, tk.Frame]
 
 # Terminal backend interface + helpers
 from utils.core.tty_terminal import TerminalIO, PipeTerminal, create_terminal
@@ -32,7 +34,7 @@ class ConsoleWindow:
         interactive: bool = False,
         auto_close: bool = True,
         is_detached: bool = True,
-        parent: Optional[tk.Widget] = None,
+        parent: Optional[TkWidget] = None,
     ) -> None:
         # Enforce EXACTLY one of process / io
         if (process is None) == (io is None):
@@ -71,7 +73,7 @@ class ConsoleWindow:
         auto_close: bool = True,
         start_new_session: bool = True,
         is_detached: bool = True,
-        parent: Optional[tk.Widget] = None,
+        parent: Optional[TkWidget] = None,
     ) -> "ConsoleWindow":
         io = create_terminal(
             argv,
@@ -120,11 +122,11 @@ class ConsoleWindow:
         
         return self.frame
 
-    def get_widget(self) -> Optional[tk.Widget]:
+    def get_widget(self) -> Optional[TkWidget]:
         """Get the console widget (root window for detached, frame for embedded)."""
         return self.root if self.is_detached else self.frame
 
-    def _create_console_widgets(self, parent: tk.Widget) -> None:
+    def _create_console_widgets(self, parent: TkWidget) -> None:
         """Create console widgets in the specified parent."""
         self.text_area = scrolledtext.ScrolledText(parent, wrap=tk.WORD)
         self.text_area.configure(
@@ -217,25 +219,126 @@ class ConsoleWindow:
 
     def _append(self, s: str) -> None:
         if self.text_area:
-            self.text_area.insert("end", s)
+            # Parse ANSI colors and apply as text tags
+            self._append_with_colors(s)
             self.text_area.see("end")
 
+    def _append_with_colors(self, text: str) -> None:
+        """Append text with ANSI color codes converted to tkinter text tags."""
+        if not self.text_area:
+            return
+            
+        # ANSI color mapping to tkinter colors (matching our logging colors)
+        ansi_colors = {
+            '91': '#ff6b6b',  # bright red (for errors)
+            '92': '#51fa7a',  # bright green (for success)
+            '93': '#f1c40f',  # bright yellow (for warnings)
+            '94': '#74b9ff',  # bright blue (for info)
+            '95': '#fd79a8',  # bright magenta (for debug)
+            '96': '#81ecec',  # bright cyan
+            '97': '#ffffff',  # bright white
+            # Standard colors
+            '31': '#ff0000',  # red
+            '32': '#00ff00',  # green
+            '33': '#ffff00',  # yellow
+            '34': '#0000ff',  # blue
+            '35': '#ff00ff',  # magenta
+            '36': '#00ffff',  # cyan
+            '37': '#ffffff',  # white
+        }
+        
+        import re
+        
+        # More comprehensive ANSI pattern that matches all escape sequences
+        ansi_pattern = re.compile(r'\x1b\[([0-9;]*)?([a-zA-Z])')
+        
+        current_color = None
+        current_bold = False
+        position = 0
+        
+        for match in ansi_pattern.finditer(text):
+            # Add text before this ANSI sequence
+            if match.start() > position:
+                plain_text = text[position:match.start()]
+                if plain_text:
+                    start_pos = self.text_area.index("end-1c")
+                    self.text_area.insert("end", plain_text)
+                    
+                    # Apply current formatting
+                    if current_color or current_bold:
+                        end_pos = self.text_area.index("end-1c")
+                        tag_name = f"style_{hash((current_color, current_bold)) % 1000}"
+                        
+                        if current_color and current_bold:
+                            self.text_area.tag_configure(tag_name, 
+                                                       foreground=current_color,
+                                                       font=("Fira Mono", 11, "bold"))
+                        elif current_color:
+                            self.text_area.tag_configure(tag_name, 
+                                                       foreground=current_color,
+                                                       font=("Fira Mono", 11))
+                        elif current_bold:
+                            self.text_area.tag_configure(tag_name, 
+                                                       font=("Fira Mono", 11, "bold"))
+                        
+                        self.text_area.tag_add(tag_name, start_pos, end_pos)
+            
+            # Process ANSI sequence (only color sequences ending with 'm')
+            if match.group(2) == 'm':
+                codes_str = match.group(1) or '0'
+                codes = codes_str.split(';') if codes_str else ['0']
+                
+                for code in codes:
+                    if code == '0' or code == '':  # Reset
+                        current_color = None
+                        current_bold = False
+                    elif code == '1':  # Bold
+                        current_bold = True
+                    elif code in ansi_colors:  # Color
+                        current_color = ansi_colors[code]
+            
+            position = match.end()
+        
+        # Add remaining text after last ANSI sequence
+        if position < len(text):
+            remaining_text = text[position:]
+            if remaining_text:
+                start_pos = self.text_area.index("end-1c")
+                self.text_area.insert("end", remaining_text)
+                
+                # Apply current formatting
+                if current_color or current_bold:
+                    end_pos = self.text_area.index("end-1c")
+                    tag_name = f"style_{hash((current_color, current_bold)) % 1000}"
+                    
+                    if current_color and current_bold:
+                        self.text_area.tag_configure(tag_name, 
+                                                   foreground=current_color,
+                                                   font=("Fira Mono", 11, "bold"))
+                    elif current_color:
+                        self.text_area.tag_configure(tag_name, 
+                                                   foreground=current_color,
+                                                   font=("Fira Mono", 11))
+                    elif current_bold:
+                        self.text_area.tag_configure(tag_name, 
+                                                   font=("Fira Mono", 11, "bold"))
+                    
+                    self.text_area.tag_add(tag_name, start_pos, end_pos)
+
     def _sanitize_text(self, text: str) -> str:
-        """Remove ANSI escape sequences and unwanted control characters from line boundaries."""
-        # Remove ANSI escape sequences (color codes, cursor movements, etc.)
-        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-        text = ansi_escape.sub('', text)
+        """Remove unwanted control characters but preserve ANSI color sequences."""
+        # Don't remove any ANSI sequences here - let _append_with_colors handle them
+        # Only remove other control characters
         
         # Clean up lines by removing unwanted characters at beginning and end only
         lines = text.split('\n')
         cleaned_lines: list[str] = []
         
-        # Define unwanted control characters to strip (excluding \n, \t but including \r)
-        control_chars = '\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0B\x0C\x0D\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F\x7F'
+        # Define unwanted control characters to strip (excluding \n, \t, \x1B for ANSI, but including \r)
+        control_chars = '\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0B\x0C\x0D\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1C\x1D\x1E\x1F\x7F'
         
         for line in lines:
             # Strip unwanted control characters from beginning and end of each line
-            # This will remove carriage returns (\r) and other control characters
             cleaned_line = line.strip(control_chars)
             # Also strip regular whitespace to clean up any extra spaces/tabs at line ends
             cleaned_line = cleaned_line.rstrip()
@@ -272,7 +375,7 @@ class ConsoleWindow:
             except Exception:
                 text = chunk.decode("latin-1", "replace")
             
-            # Sanitize the text before appending
+            # Sanitize the text before appending (keeps ANSI colors)
             sanitized_text = self._sanitize_text(text)
             self._append(sanitized_text)
         

@@ -5,7 +5,7 @@ from typing import Optional
 from netfilterqueue import NetfilterQueue, Packet
 from ipaddress import ip_network, IPv4Network, IPv6Network
 
-from utils.core.logs import print_debug, print_success, print_warning
+from utils.core.logs import print_debug, print_info, print_success, print_warning, set_verbosity
 from scapy.packet import Packet as ScapyPacket
 from scapy.layers.inet import IP, UDP
 import socket
@@ -95,9 +95,9 @@ class Spoofer:
 
 if __name__ == "__main__":
     """Main function to run the spoofer."""
-    print("Starting the SIP Spoofer...")
-    if len(sys.argv) <  6:
-        print("Usage: python spoofer.py [attack_queue_num] [spoofing_subnet] [target_ip] [target_port] [source_port]")
+    print_info("Starting the SIP Spoofer...")
+    if len(sys.argv) < 6:
+        print_info("Usage: python spoofer.py [attack_queue_num] [spoofing_subnet] [target_ip] [target_port] [source_port] [verbosity]")
         sys.exit(1)
     
     attack_queue_num = int(sys.argv[1])
@@ -105,6 +105,11 @@ if __name__ == "__main__":
     target_ip = sys.argv[3]
     target_port = int(sys.argv[4])
     source_port = int(sys.argv[5])
+    
+    # Set verbosity if provided (default to "info" if not provided)
+    verbosity = sys.argv[6] if len(sys.argv) > 6 else "info"
+    set_verbosity(verbosity)
+    print_debug(f"Spoofer verbosity set to: {verbosity}")
 
     spoofer = Spoofer(
         attack_queue_num=attack_queue_num,

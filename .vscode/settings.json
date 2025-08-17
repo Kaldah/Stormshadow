@@ -1,6 +1,9 @@
 {
-    "python.defaultInterpreterPath": "/home/kaldah/venvs/scratchpad/bin/python",
+    "python.defaultInterpreterPath": ".venv/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "python.terminal.activateEnvInCurrentTerminal": true,
     "terminal.integrated.env.linux": {
-        "PATH": "/home/kaldah/venvs/scratchpad/bin:${env:PATH}"
+        "PATH": ".venv/bin:${env:PATH}",
+        "VIRTUAL_ENV": "${workspaceFolder}/.venv"
     }
 }

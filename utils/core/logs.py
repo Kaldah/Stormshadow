@@ -5,13 +5,6 @@ import os
 import sys
 from typing import Any, Optional
 
-try:
-    # Optional, for Windows ANSI color support
-    import colorama
-    colorama.just_fix_windows_console()  # no-op elsewhere
-except Exception:
-    pass
-
 
 # ---------- Colors (reusing your palette) ----------
 class Colors:
@@ -28,6 +21,19 @@ class Colors:
 
 
 def _supports_color(stream: Any) -> bool:
+    """
+    Check if the given stream supports ANSI color codes.
+    On Windows, this requires colorama to be installed.
+    """
+    # Force color support when environment variable is set
+    if os.environ.get("FORCE_COLOR") in ("1", "true", "yes"):
+        return True
+    
+    # Disable colors when NO_COLOR is set
+    if os.environ.get("NO_COLOR"):
+        return False
+    
+    # Check if stream supports color
     return (
         hasattr(stream, "isatty")
         and stream.isatty()
@@ -84,6 +90,7 @@ class StormFormatter(logging.Formatter):
 
     def __init__(self, use_color: bool, for_file: bool = False):
         super().__init__(fmt="%(message)s")
+        # Never use color in file output
         self.use_color = use_color and not for_file
 
     def format(self, record: logging.LogRecord) -> str:
@@ -96,10 +103,14 @@ class StormFormatter(logging.Formatter):
         if levelname == "DEV" and "IN_DEV_BLOCK" in record.__dict__ and record.__dict__["IN_DEV_BLOCK"]:
             base = f"== IN DEV ==\n⚠ {record.getMessage()}\n" + "=" * 30
 
+        # Apply colors if supported and enabled
         if self.use_color:
             color = self.COLOR.get(levelname, "")
             if color:
+                # Make sure we're properly embedding the color codes
                 return f"{color}{base}{Colors.END}"
+        
+        # No color formatting
         return base
 
 
@@ -109,7 +120,7 @@ def setup_logging(
     name: str = "stormshadow",
     verbosity: str | int = "info",
     logfile: Optional[str] = None,
-    use_colors: Optional[bool] = None,
+    use_colors: Optional[bool] = True,  # Default to True to force color output
 ) -> StormLogger:
     """
     Create/configure a logger once (idempotent).
@@ -146,6 +157,7 @@ def setup_logging(
 
     # Console handler
     ch = logging.StreamHandler(stream=sys.stdout)
+    # Force colors if explicitly requested
     console_colors = _supports_color(sys.stdout) if use_colors is None else use_colors
     ch.setFormatter(StormFormatter(use_color=console_colors))
     ch.setLevel(level)
@@ -158,12 +170,18 @@ def setup_logging(
         fh.setLevel(level)
         logger.addHandler(fh)
 
+    # Store the configured color setting for later reference
+    logger.use_color = console_colors  # type: ignore[attr-defined]
     logger._storm_is_configured = True  # type: ignore[attr-defined]
     return logger
 
 
 # ---------- Compatibility layer (your existing API) ----------
 _logger: StormLogger = setup_logging()
+
+def enable_debug_mode():
+    """Enable debug mode with colors."""
+    set_verbosity("debug")
 
 def set_verbosity(verbosity: str | int) -> None:
     """Set the verbosity level for logging."""

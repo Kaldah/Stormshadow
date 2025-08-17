@@ -229,6 +229,9 @@ class SipPacketSpoofer:
                     self.verbosity,  # Add verbosity argument
                 ],
                 want_sudo=True,
+                # When escalating, preserve the current environment (venv) and allow interactive sudo
+                sudo_preserve_env=True,
+                sudo_non_interactive=False,
                 new_terminal=False,
                 open_window=self.open_window,
                 window_title="SIP Spoofer",

@@ -76,7 +76,7 @@ attack:
     - "201"
     - "202"
 
-  spoofing_subnet: "10.10.123.0/25"
+  spoofing_subnet: "10.10.122.0/25"
   user_agent: "StormShadow"  # Custom user-agent
   # Path to custom payload, if needed put a "payload.sip" file for full customization
   custom_payload_path: "sip-attacks/custom_payloads/custom_payload_config.yaml"

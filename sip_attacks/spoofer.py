@@ -5,12 +5,11 @@ from typing import Optional
 from netfilterqueue import NetfilterQueue, Packet
 from ipaddress import ip_network, IPv4Network, IPv6Network
 
-from utils.core.logs import print_debug, print_info, print_success, print_warning, set_verbosity
+from utils.core.logs import print_debug, print_error, print_info, print_success, print_warning, set_verbosity
 from scapy.packet import Packet as ScapyPacket
 from scapy.layers.inet import IP, UDP
 import socket
 from types import FrameType
-
 
 EPHEMERAL_PORTS = range(49152, 65536)
 
@@ -58,8 +57,9 @@ class Spoofer:
         Args:
             packet: The packet object from NetfilterQueue.
         """
+
         try:
-            print_debug(f"Packet received for queue {self.attack_queue_num}: {packet}")
+            print(f"Packet received for queue {self.attack_queue_num}: {packet}")
             # Here we modify the packet to spoof the source IP
             pkt: ScapyPacket = IP(packet.get_payload())
             pkt.src = self.get_spoofed_ip()
@@ -118,13 +118,37 @@ if __name__ == "__main__":
         victim_ip=target_ip,
         attacker_port=source_port
     )
-
+    print_debug(f"Initialized Spoofer with queue {attack_queue_num}, subnet {spoofing_subnet}, target IP {target_ip}, target port {target_port}, source port {source_port}")
     signal.signal(signal.SIGTERM, spoofer.cleanup)
     signal.signal(signal.SIGINT, spoofer.cleanup)
 
-    netfilter_spoofing_queue = NetfilterQueue()
-    netfilter_spoofing_queue.bind(attack_queue_num, spoofer.packet_spoofer)
-    print_debug(f"Successfully bound spoofing function to queue {attack_queue_num}")
-    spoofer.send_ready_signal()
-    netfilter_spoofing_queue.run()
-    print_success(f"Started spoofing thread for queue {attack_queue_num}")
+    try:
+        print_debug(f"Starting packet spoofing for queue {attack_queue_num}")
+        print_debug(f"sys.argv={repr(sys.argv)}")
+        print_debug(f"Parsed attack_queue_num (type={type(attack_queue_num)}): {attack_queue_num!r}")
+
+        netfilter_spoofing_queue = NetfilterQueue()
+        # keep reference for cleanup/unbind
+        spoofer.netfilter_spoofing_queue = netfilter_spoofing_queue
+        print_debug(f"Binding spoofing function to queue {attack_queue_num}")
+        try:
+            netfilter_spoofing_queue.bind(attack_queue_num, spoofer.packet_spoofer)
+            print_debug(f"Successfully bound spoofing function to queue {attack_queue_num}")
+        except OSError as oe:
+            # Provide detailed diagnostic info to help root-cause the bind failure
+            errno = getattr(oe, 'errno', None)
+            print_error(f"OSError while binding NFQUEUE {attack_queue_num}: errno={errno} message={oe}")
+            # Exit promptly so this failed child doesn't linger
+            sys.exit(1)
+
+        spoofer.send_ready_signal()
+        netfilter_spoofing_queue.run()
+        print_success(f"Started spoofing thread for queue {attack_queue_num}")
+    except KeyboardInterrupt:
+        print_info("Keyboard interrupt received, stopping spoofing...")
+        sys.exit(0)
+    except Exception as e:
+        print_error(f"Unexpected error occurred: {e}")
+        sys.exit(1)
+    finally:
+        print_success("Spoofer cleanup completed.")

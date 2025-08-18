@@ -92,6 +92,7 @@ def run_command(
     if dry_run:
         print_debug("Dry run enabled, not actually executing.")
         raise RuntimeError("Dry run enabled, not actually executing.")
+    print_debug("Executing command: " + " ".join(shlex.quote(a) for a in final_argv))
     return subprocess.run(
         final_argv,
         cwd=cwd,

@@ -46,9 +46,26 @@ def check_root() -> bool:
 def get_interface() -> str:
     """Get the default network interface."""
     try:
-        return netifaces.gateways()['default'][netifaces.AF_INET][1]
+        gateways = netifaces.gateways()
+        
+        # Look for the IPv4 gateway interface
+        if netifaces.AF_INET in gateways:
+            interfaces_with_gateway = gateways[netifaces.AF_INET]
+            if interfaces_with_gateway:
+                # Return the interface of the first gateway (usually the default route)
+                return interfaces_with_gateway[0][1]
+        
+        # Fallback: find the first non-loopback interface with an IP
+        for interface in netifaces.interfaces():
+            if interface != 'lo':
+                addresses = netifaces.ifaddresses(interface)
+                if netifaces.AF_INET in addresses:
+                    return interface
+                    
     except Exception:
-        return "lo"
+        pass
+    
+    return "lo"
 
 def get_interface_ip(interface: str) -> Optional[str]:
     """
@@ -64,7 +81,7 @@ def get_interface_ip(interface: str) -> Optional[str]:
         if interface in netifaces.interfaces():
             addresses = netifaces.ifaddresses(interface)
             if netifaces.AF_INET in addresses:
-                return addresses[netifaces.AF_INET][0]['addr']
+                return addresses[netifaces.AF_INET][0]['addr']  # type: ignore
     except ImportError:
         # Fallback using ip command
         try:
@@ -85,7 +102,7 @@ def get_interface_ip(interface: str) -> Optional[str]:
     except Exception as e:
         print_warning(f"Error getting IP for {interface}. Falling back to localhost IP: {e}")
 
-    return "127.0.1"  # Fallback to localhost if interface not found
+    return "127.0.0.1"  # Fallback to localhost if interface not found
 
 def get_default_ip() -> str:
     """

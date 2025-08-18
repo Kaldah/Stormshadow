@@ -187,14 +187,52 @@ tc filter show dev eth0 egress
 
 ✅ **COMPLETED** - All components implemented and tested successfully:
 
-- **eBPF Kernel Program**: Compiles and loads correctly
-- **Python Integration**: Full TC management and eBPF lifecycle
-- **Attack Module Integration**: Works with `attack_inviteflood_eBPF`
-- **Socket Compatibility**: Analyzed and documented  
-- **Stability Testing**: No crashes detected in comprehensive testing
-- **Performance**: High-performance kernel-space packet modification achieved
+- **eBPF Kernel Program** (`ebpf_spoofer.c`): Compiles and handles packet modification in kernel space
+- **eBPF Spoofer Manager** (`ebpf_spoofer.py`): Manages TC configuration and eBPF lifecycle  
+- **eBPF SIP Spoofing Class** (`ebpf_sip_spoofing.py`): Compatible interface with original spoofer
+- **Attack Module Integration** (`attack_inviteflood_ebpf.py`): Full integration with StormShadow framework
+- **Dynamic Spoofing**: Round-robin IP selection and random port generation in kernel space
+- **Performance Testing**: High-performance kernel-space packet modification achieved
+- **Compilation System**: Automated Makefile-based build system
 
-The eBPF spoofer is **production-ready** and successfully replaces netfilterqueue with superior performance characteristics.
+The eBPF spoofer is **production-ready** and successfully provides superior performance to netfilterqueue with dynamic IP spoofing capabilities.
+
+## New Features in v2.0
+
+### Dynamic eBPF Spoofing
+- **Kernel-space packet modification**: No userspace copies or context switches
+- **Round-robin IP selection**: Automatically cycles through spoofed IPs in kernel
+- **Random port generation**: Uses PRNG in kernel for ephemeral port assignment
+- **Real-time configuration**: eBPF maps allow runtime parameter updates
+- **Precise targeting**: Filters packets by IP, port, and protocol
+
+### Architecture Components
+
+1. **eBPF Kernel Program** (`ebpf_spoofer.c`)
+   - Attaches to TC egress hook for outgoing packet interception
+   - Parses Ethernet/IP/UDP headers for SIP packet identification
+   - Maintains configuration and IP address maps
+   - Performs checksum recalculation after modification
+   - Uses efficient round-robin and PRNG algorithms
+
+2. **eBPF Manager** (`ebpf_spoofer.py`) 
+   - Compiles eBPF program automatically if needed
+   - Manages TC qdisc and filter configuration
+   - Configures eBPF maps with spoofing parameters
+   - Provides compatibility with netfilterqueue spoofer interface
+   - Handles cleanup and error conditions
+
+3. **SIP Spoofing Integration** (`ebpf_sip_spoofing.py`)
+   - Drop-in replacement for `SipPacketSpoofer` class
+   - Manages eBPF spoofer process lifecycle
+   - Provides same interface as original spoofer
+   - Supports session management and cleanup
+
+4. **Attack Module** (`attack_inviteflood_ebpf.py`)
+   - Integrates eBPF spoofing with InviteFlood attack
+   - Automatically starts/stops eBPF spoofing around attack
+   - Provides transparent spoofing for any SIP traffic
+   - Enhanced performance compared to userspace approaches
 
 ## Security Considerations
 

@@ -6,10 +6,12 @@ This module provides the lab environment management interface.
 
 import tkinter as tk
 from tkinter import ttk, messagebox
+import threading
+import time
 
-from utils.config.config import Parameters
 from gui.utils.themes import get_theme_colors, create_tooltip
 from gui.managers.gui_storm_manager import GUIStormManager
+from gui.utils.gui_lab_manager import GUILabManager
 
 
 class LabPanel:
@@ -26,6 +28,13 @@ class LabPanel:
         self.parent = parent
         self.gui_manager = gui_manager
         self.lab_instance = None
+        
+        # Create a dedicated GUI lab manager for direct lab operations
+        from utils.config.config import Config, Parameters, ConfigType
+        lab_params = Parameters({})  # Empty params, will be filled by GUI controls
+        lab_config = Config(ConfigType.LAB, lab_params)
+        self.gui_lab_manager = GUILabManager(lab_config)
+        self.gui_lab_manager.set_status_callback(self._on_lab_status_update)
 
         # Create the main frame
         self.main_frame = ttk.Frame(parent)
@@ -37,8 +46,11 @@ class LabPanel:
         self._create_control_buttons()
         self._create_status_display()
 
-        # Register for status updates
+        # Register for status updates from storm manager
         self.gui_manager.register_status_callback("lab_panel", self._on_status_update)
+        
+        # Start status update timer
+        self._update_status_timer()
 
     def _create_lab_info(self):
         """Create the lab information section."""
@@ -117,6 +129,11 @@ class LabPanel:
         self.dry_run_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(right_frame, text="Dry Run Mode",
                         variable=self.dry_run_var).pack(anchor=tk.W, pady=2)
+
+        self.open_window_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(right_frame, text="Open Terminal Window",
+                        variable=self.open_window_var).pack(anchor=tk.W, pady=2)
+        create_tooltip(right_frame, "Open the lab container in a new terminal window (not recommended for GUI use)")
 
         # Container info section
         container_frame = ttk.Frame(config_frame)
@@ -219,45 +236,45 @@ class LabPanel:
         """Start the lab environment."""
         self._add_status_message("Starting lab environment...")
 
-        # Create configuration parameters
-        config_params = Parameters({
+        # Update the GUI lab manager's config with current settings
+        from utils.config.config import Config, Parameters, ConfigType
+        lab_params = Parameters({
             "spoofed_subnet": self.spoofed_subnet_var.get(),
             "return_addr": self.return_addr_var.get(),
             "keep_lab_open": self.keep_open_var.get(),
             "enable_logging": self.enable_logging_var.get(),
             "auto_cleanup": self.auto_cleanup_var.get(),
             "dry_run": self.dry_run_var.get(),
+            "open_window": self.open_window_var.get(),
         })
+        
+        lab_config = Config(ConfigType.LAB, lab_params)
+        self.gui_lab_manager.config = lab_config
 
-        self._add_status_message(f"Configuration: {dict(config_params)}")
+        self._add_status_message(f"Configuration: {dict(lab_params)}")
 
-        # Create and start lab instance
-        success = self.gui_manager.create_lab_instance(config_params)
-        if success:
-            self.lab_instance = "lab_manager"  # Use correct instance name
-
-            success = self.gui_manager.start_instance("lab_manager")  # Use correct instance name
+        # Start lab using GUI lab manager
+        def start_thread():
+            success = self.gui_lab_manager.start_lab()
             if success:
                 self._update_button_states(lab_running=True)
-                self._add_status_message("Lab started successfully!")
-                self._update_status_display("Running")
+                self._add_status_message("Lab start initiated...")
             else:
                 self._add_status_message("Failed to start lab!")
                 messagebox.showerror(
                     "Error", "Failed to start the lab. Check Docker installation and permissions.")
-        else:
-            self._add_status_message("Failed to create lab instance!")
-            messagebox.showerror("Error", "Failed to create the lab instance.")
+
+        # Run in separate thread to avoid blocking GUI
+        thread = threading.Thread(target=start_thread, daemon=True)
+        thread.start()
 
     def _stop_lab(self):
         """Stop the lab environment."""
-        if self.lab_instance:
-            self._add_status_message("Stopping lab environment...")
+        self._add_status_message("Stopping lab environment...")
 
-            success = self.gui_manager.stop_instance(self.lab_instance)
+        def stop_thread():
+            success = self.gui_lab_manager.stop_lab()
             if success:
-                self.gui_manager.remove_instance(self.lab_instance)
-                self.lab_instance = None
                 self._update_button_states(lab_running=False)
                 self._update_status_display("Stopped")
                 self._add_status_message("Lab stopped successfully!")
@@ -265,13 +282,32 @@ class LabPanel:
                 self._add_status_message("Failed to stop lab!")
                 messagebox.showerror("Error", "Failed to stop the lab.")
 
+        # Run in separate thread to avoid blocking GUI
+        thread = threading.Thread(target=stop_thread, daemon=True)
+        thread.start()
+
     def _restart_lab(self):
         """Restart the lab environment."""
-        if self.lab_instance:
-            self._add_status_message("Restarting lab environment...")
-            self._stop_lab()
-            # Wait a moment before restarting
-            self.parent.after(1000, self._start_lab)
+        self._add_status_message("Restarting lab environment...")
+        
+        def restart_thread():
+            # Stop first
+            success = self.gui_lab_manager.stop_lab()
+            if success:
+                time.sleep(2)  # Wait a moment
+                # Start again
+                success = self.gui_lab_manager.start_lab()
+                if success:
+                    self._add_status_message("Lab restart initiated...")
+                else:
+                    self._add_status_message("Failed to restart lab!")
+                    messagebox.showerror("Error", "Failed to restart the lab.")
+            else:
+                self._add_status_message("Failed to stop lab for restart!")
+
+        # Run in separate thread to avoid blocking GUI
+        thread = threading.Thread(target=restart_thread, daemon=True)
+        thread.start()
 
     def _show_logs(self):
         """Show detailed container logs."""
@@ -321,11 +357,53 @@ class LabPanel:
         self.status_text.insert(tk.END, formatted_message)
         self.status_text.see(tk.END)
 
+    def _on_lab_status_update(self, message: str):
+        """Handle status updates from the GUI lab manager."""
+        self._add_status_message(f"Lab: {message}")
+        
+        # Update display based on status
+        status = self.gui_lab_manager.get_status()
+        if status == "Running":
+            self._update_status_display("Running")
+            self._update_button_states(lab_running=True)
+        elif status == "Stopped":
+            self._update_status_display("Stopped") 
+            self._update_button_states(lab_running=False)
+        elif status.startswith("Starting"):
+            self._update_status_display("Starting")
+        elif status.startswith("Stopping"):
+            self._update_status_display("Stopping")
+        else:
+            self._update_status_display(status)
+
+    def _update_status_timer(self):
+        """Periodically update the lab status."""
+        try:
+            # Check actual lab status
+            status = self.gui_lab_manager.get_status()
+            current_display = self.status_label.cget("text")
+            
+            # Update if status changed
+            if current_display != status:
+                self._update_status_display(status)
+                
+                # Update button states based on status
+                if status == "Running":
+                    self._update_button_states(lab_running=True)
+                elif status == "Stopped":
+                    self._update_button_states(lab_running=False)
+                    
+        except Exception as e:
+            self._add_status_message(f"Status check error: {e}")
+            
+        # Schedule next update
+        self.parent.after(3000, self._update_status_timer)  # Update every 3 seconds
+
     def _on_status_update(self, instance_name: str, status: str):
         """Handle status updates from the GUI manager."""
-        if instance_name == self.lab_instance:
-            self._add_status_message(f"Lab status: {status}")
-            self._update_status_display(status.capitalize())
+        # This is for storm manager updates, we now primarily use gui_lab_manager
+        if "lab" in instance_name.lower():
+            self._add_status_message(f"Storm Manager - {instance_name}: {status}")
 
             if status in ["stopped", "error"]:
                 self._update_button_states(lab_running=False)
@@ -334,10 +412,9 @@ class LabPanel:
 
     def cleanup(self):
         """Clean up the lab panel resources."""
-        # Unregister status callback
+        # Unregister status callback from storm manager
         self.gui_manager.unregister_status_callback("lab_panel")
 
-        # Stop lab if running
-        if self.lab_instance:
-            self.gui_manager.stop_instance(self.lab_instance)
-            self.gui_manager.remove_instance(self.lab_instance)
+        # Stop lab if running via GUI lab manager
+        if hasattr(self, 'gui_lab_manager') and self.gui_lab_manager.is_running():
+            self.gui_lab_manager.stop_lab()

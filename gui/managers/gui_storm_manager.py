@@ -124,7 +124,7 @@ class GUIStormManager:
                 "attack": True,
                 "lab": False,
                 "gui": True,
-                "open_window": True,
+                "open_window": config_params.get("open_window", False),  # Don't force open_window for GUI
                 "spoofing_enabled": config_params.get("spoofing_enabled", True),
                 "return_path_enabled": config_params.get("return_path_enabled", True),
                 "target_ip": config_params.get("target_ip", default_ip),

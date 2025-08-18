@@ -186,8 +186,16 @@ class GUILabManager:
                     print_info("Starting lab manager from GUI...")
                     if self.lab_manager:
                         self.lab_manager.start()
-                        self._update_status("Lab started successfully")
-                        print_success("Lab started successfully")
+                        # Verify it actually started
+                        time.sleep(1)  # Give it a moment to start
+                        if self.is_running():
+                            self._update_status("Lab started successfully")
+                            print_success("Lab started successfully")
+                        else:
+                            error_msg = "Lab container failed to start properly"
+                            print_error(error_msg)
+                            self._update_status(error_msg)
+                            self.lab_manager = None
                     else:
                         raise Exception("Lab manager not initialized")
                 except subprocess.CalledProcessError as e:
@@ -199,6 +207,7 @@ class GUILabManager:
                     else:
                         print_error(f"Failed to start lab: {error_msg}")
                         self._update_status(f"Lab start failed: {error_msg}")
+                    self.lab_manager = None
                 except Exception as e:
                     error_msg = str(e)
                     print_error(f"Failed to start lab: {error_msg}")
@@ -216,6 +225,7 @@ class GUILabManager:
                             "Terminal connection failed. Container may be starting in background.")
                     else:
                         self._update_status(f"Lab start failed: {error_msg}")
+                    self.lab_manager = None
                 finally:
                     self._is_starting = False
 
@@ -252,10 +262,17 @@ class GUILabManager:
             def stop_thread():
                 try:
                     if self.lab_manager:
+                        print_info("Stopping lab manager...")
                         self.lab_manager.stop()
-                        self.lab_manager = None
-                        self._update_status("Lab stopped")
-                        print_success("Lab stopped successfully")
+                        # Verify it actually stopped
+                        time.sleep(1)  # Give it a moment to stop
+                        if not self.is_running():
+                            self.lab_manager = None
+                            self._update_status("Lab stopped")
+                            print_success("Lab stopped successfully")
+                        else:
+                            print_warning("Lab may still be running after stop command")
+                            self._update_status("Lab stop may have failed")
                     else:
                         self._update_status("Lab was not running")
                         print_info("Lab manager was not initialized")
@@ -309,7 +326,13 @@ class GUILabManager:
             return "Stopped"
         else:
             try:
-                return self.lab_manager.status()
+                status = self.lab_manager.status()
+                if status and status.startswith("Up"):
+                    return "Running"
+                elif status == "Unknown" or not status:
+                    return "Error"
+                else:
+                    return "Stopped"
             except Exception as e:
                 return f"Error: {e}"
 
@@ -325,6 +348,6 @@ class GUILabManager:
 
         try:
             status = self.lab_manager.status()
-            return status.startswith("Up")
+            return status.startswith("Up") and status != "Unknown"
         except BaseException:
             return False

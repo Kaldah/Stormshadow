@@ -88,7 +88,7 @@ class AttackManager:
             raise KeyError(f"Attack module {module_name} not found in available modules.")
         
         # Build the attack from the module path
-        self.current_attack = build_attack_from_module(module_path, self.config.parameters, enable_spoofing=self.spoofing_enabled, session_uid=self.session_uid, dry_run=self.dry_run)
+        self.current_attack : Optional[AttackSession] = build_attack_from_module(module_path, self.config.parameters, enable_spoofing=self.spoofing_enabled, session_uid=self.session_uid, dry_run=self.dry_run)
 
         return True  # Return True if the module was loaded successfully
 

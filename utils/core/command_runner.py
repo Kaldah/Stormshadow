@@ -143,6 +143,7 @@ def run_process(argv: List[str],
                 window_title: Optional[str] = None,
                 sudo_preserve_env: bool = False,
                 sudo_non_interactive: bool = True,
+                keep_window_open: bool = False,
                 dry_run: bool = False) -> subprocess.Popen[bytes]:
     """
     Run a command (argv) robustly. Creates a new process group so you can signal it later.
@@ -174,6 +175,9 @@ def run_process(argv: List[str],
     if new_terminal:
         # Use bash -lc with exec so signals hit the real process.
         inner = "exec " + " ".join(shlex.quote(a) for a in final_argv)
+        if keep_window_open:
+            # Add "; bash" to keep the terminal open after the command finishes
+            inner = inner + "; echo 'Process finished. Press Enter to exit or wait 30s...'; timeout 30 bash || true"
         cmd = ['gnome-terminal', '--', 'bash', '-lc', inner]
         print_in_dev(f"Running in new terminal: {cmd}")
         if dry_run:
@@ -184,6 +188,7 @@ def run_process(argv: List[str],
     if open_window:
         # Use ConsoleWindow.spawn to properly handle the terminal backend
         title = window_title or "Console Window"
+        auto_close = not keep_window_open  # Don't auto-close if we want to keep the window open
         win = ConsoleWindow.spawn(
             final_argv,
             cwd=cwd,
@@ -191,7 +196,7 @@ def run_process(argv: List[str],
             prefer_tty=True,
             title=title,
             interactive=interactive,
-            auto_close=True,
+            auto_close=auto_close,
             start_new_session=True
         )
         # Start the window in a separate thread so it doesn't block
@@ -227,6 +232,7 @@ def run_python(*,
             interactive: bool = False,
             sudo_preserve_env: bool = True,
             sudo_non_interactive: bool = True,
+            keep_window_open: bool = False,
             dry_run: bool = False):
     """
     Launch Python using the SAME interpreter as this process.
@@ -254,5 +260,6 @@ def run_python(*,
         interactive=interactive,
         sudo_preserve_env=sudo_preserve_env,
         sudo_non_interactive=sudo_non_interactive,
+        keep_window_open=keep_window_open,
         dry_run=dry_run
     )

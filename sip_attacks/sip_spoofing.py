@@ -217,7 +217,7 @@ class SipPacketSpoofer:
                 return False
         try:
             print_debug("Trying to start spoofer")
-            print_debug("New window: " + str(self.open_window))
+            print_debug("Open window: " + str(self.open_window))
             self.spoofer_process = run_python(
                 module="sip_attacks.spoofer",
                 args=[

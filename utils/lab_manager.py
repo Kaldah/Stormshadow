@@ -31,8 +31,9 @@ class LabManager:
             keep_lab_open: Whether to keep lab open after stopping
             gui_mode: Whether running in GUI mode
             dry_run: Whether to run in dry-run mode
+            open_window: Whether to open lab container in a new terminal window
         """
-        self.config = config
+        self.parameters = config.parameters
         self.container_process = None
         self.container_name = "sip-victim"
         self.docker_image = "asterisk-sip-server"
@@ -42,7 +43,8 @@ class LabManager:
         self.project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.keep_lab_open = keep_lab_open
         self.gui_mode = gui_mode
-
+        self.open_window = self.parameters.get("open_window", False)  # Use config setting for window opening
+        print_debug(f"Lab manager initialized with parameters: {self.parameters}")
         self.is_running = False  # Track if the lab is currently running
         print_info("Lab manager initialized")
 
@@ -146,8 +148,18 @@ class LabManager:
             # Start the Docker container
             print_info("Starting Docker container...")
             
+            # Choose Docker flags based on whether we want a terminal window
+            if self.open_window:
+                # Interactive mode with terminal
+                docker_flags = "--rm -it"
+                print_debug("Starting container in interactive terminal mode")
+            else:
+                # Detached mode for background execution
+                docker_flags = "--rm -d"
+                print_debug("Starting container in detached background mode")
+            
             docker_command = (
-                f"docker run --rm -it "
+                f"docker run {docker_flags} "
                 f"--network host "
                 f"--cap-add=NET_ADMIN "
                 f"--cap-add=NET_RAW "
@@ -157,27 +169,41 @@ class LabManager:
                 f"{self.docker_image}"
             )
             
-            # Start the container in a new terminal so it can be interactive
+            # Start the container - use open_window setting instead of hardcoded new_terminal
             self.container_process = run_process(
                 docker_command.split(),
-                new_terminal=True,
+                new_terminal=self.open_window,
                 want_sudo=True,
                 sudo_preserve_env=True,
                 sudo_non_interactive=True
             )
             
             print_info(f"Lab container '{self.container_name}' started successfully")
+            
+            # When running in detached mode, give it a bit more time to start
+            initial_wait = 1.0 if not self.open_window else 0.2
+            time.sleep(initial_wait)
+            
             waiting_time = 0  # seconds to wait for the container to be ready
-            timeout = 5  # seconds to wait for the container to be ready
+            timeout = 10  # increased timeout for more reliable startup
             status = self.status()
+            print_debug(f"Initial container status check: '{status}', is_running: {self.is_running}")
+            
             while (self.is_running is False and waiting_time < timeout):
-                time.sleep(0.2)  # Wait for a short time before checking again
-                waiting_time += 0.2
+                time.sleep(0.5)  # Wait a bit longer between checks
+                waiting_time += 0.5
                 status = self.status()
+                print_debug(f"Container status after {waiting_time}s: '{status}', is_running: {self.is_running}")
+                
             if waiting_time >= timeout:
                 print_error("Lab container did not start within the expected time")
+                print_error(f"Final status: '{status}', is_running: {self.is_running}")
                 raise Exception("Lab container did not start in time")
-            print_info(f"Container is running in a new terminal window: {status}")
+            
+            if self.open_window:
+                print_info(f"Container is running in a new terminal window: {status}")
+            else:
+                print_info(f"Container is running in background: {status}")
 
         except Exception as e:
             print_error(f"Error starting lab: {e}")

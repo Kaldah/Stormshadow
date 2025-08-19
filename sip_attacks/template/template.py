@@ -62,7 +62,7 @@ class TemplateAttack(AttackInterface):
     def cleanup(self) -> None:
         print_info("Cleaning up template attack resources")
         # Stop spoofing if it was enabled
-        if hasattr(self, 'spoofer') and self.spoofer:
+        if hasattr(self, 'spoofer') and self.spoofer:  # type: ignore
             print_info("Stopping spoofer as part of cleanup...")
             try:
                 self.stop_spoofing()

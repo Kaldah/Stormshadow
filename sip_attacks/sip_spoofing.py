@@ -264,6 +264,7 @@ class SipPacketSpoofer:
                 window_title="SIP Spoofer",
                 interactive=False,
                 dry_run=self.dry_run,
+                keep_window_open=False
             )
 
             # We wait for the spoofer to be ready

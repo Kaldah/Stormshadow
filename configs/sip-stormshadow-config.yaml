@@ -67,7 +67,7 @@ attack:
   attack_queue_num: "auto"  # Automatically determine the queue number for the attack
 
   max_count: 10 # Number of SIP INVITE messages to send, put 0 for unlimited
-  delay: 0.01 # Delay between each invites put 0 for maximum speed
+  delay: 0 # Delay between each invites put 0 for maximum speed
   max_duration: 60  # Maximum duration of the attack in seconds put 0 for unlimited
   rate : 100  # Rate of SIP INVITE messages per second
   open_window: "auto"  # Open a new terminal window for the attack by default

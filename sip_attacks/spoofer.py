@@ -1,6 +1,7 @@
 import random
 import signal
 import sys
+import os
 from typing import Optional
 from netfilterqueue import NetfilterQueue, Packet
 from ipaddress import ip_network, IPv4Network, IPv6Network
@@ -80,11 +81,25 @@ class Spoofer:
             print_debug(f"Packet spoofing completed for queue {self.attack_queue_num}.")
 
     def cleanup(self, signum: int, frame: Optional[FrameType]):
-        print("Cleanup before exit!")
+        # Use an async-signal-safe write to avoid reentrant I/O in logging handlers
+        try:
+            os.write(2, b"Cleanup before exit!\n")
+        except Exception:
+            # Best-effort only; avoid raising inside a signal handler
+            pass
         # Cleanup code
         if self.netfilter_spoofing_queue is not None:
-            self.netfilter_spoofing_queue.unbind()
-        sys.exit(0)
+            try:
+                self.netfilter_spoofing_queue.unbind()
+            except Exception:
+                # Ignore unbind errors during shutdown
+                pass
+        # Use os._exit in a signal handler to avoid reentrant interpreter teardown
+        try:
+            os._exit(0)
+        except Exception:
+            # Fallback if os._exit is not available for some reason
+            sys.exit(0)
 
     def send_ready_signal(self):
         print_debug(f"Waiting for spoofer to signal ready on queue {self.attack_queue_num}")

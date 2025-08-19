@@ -43,42 +43,39 @@ def run_command(
     """
     Run a command as a list of arguments and return a CompletedProcess result.
 
-    Features:
-    - **No shell**: arguments are passed directly to the OS, avoiding shell injection risks.
-    - **Automatic sudo support**: if `want_sudo=True` and the current user is not root,
-      the command is automatically prefixed with `sudo` (if available).
-        * If `sudo_non_interactive=True`, adds `-n` to avoid hanging for a password prompt.
-        * If `sudo_non_interactive=False` (default), allows interactive password prompts.
-        * If `sudo_preserve_env=True`, adds `-E` to preserve the current environment under sudo.
-    - **Environment control**: you can override `cwd` (working directory) and `env` (environment variables).
-    - **Output capture**: by default, both stdout and stderr are captured (`capture_output=True`),
-      and the output is decoded to text strings (`text=True`).
-    - **Error handling**: if `check=True`, raises `subprocess.CalledProcessError` when the
-      command exits with a non-zero status; otherwise, returns the CompletedProcess object
-      without raising.
-    
+        Features:
+
+        - No shell: arguments are passed directly to the OS, avoiding shell injection risks.
+        - Automatic sudo support: if want_sudo is True and the current user is not root, the
+            command is prefixed with sudo (if available). If sudo_non_interactive is True, "-n" is
+            added to fail fast instead of waiting for a password prompt. If sudo_non_interactive is
+            False, interactive prompts are allowed. If sudo_preserve_env is True, "-E" is added to
+            preserve the current environment variables under sudo.
+        - Environment control: override cwd (working directory) and env (environment variables).
+        - Output capture: by default, both stdout and stderr are captured (capture_output=True), and
+            the output is decoded to text strings (text=True).
+        - Error handling: if check=True, raise subprocess.CalledProcessError on non-zero exit; otherwise
+            return the CompletedProcess object without raising.
+
     Args:
-        argv: List of program arguments, e.g. `["ls", "-l"]`.
+        argv: List of program arguments, for example ["ls", "-l"].
         cwd: Optional working directory to run the command in.
         env: Optional dict of environment variables to pass to the command.
         want_sudo: Whether to prefix the command with sudo when not root.
-        sudo_non_interactive: If True, pass `-n` to sudo to fail fast if a password is required.
-                              If False allow interactive password prompts.
-        sudo_preserve_env: If True, pass `-E` to sudo to keep the current environment.
+        sudo_non_interactive: If True, pass -n to sudo to fail fast if a password is required.
+            If False, allow interactive password prompts.
+        sudo_preserve_env: If True, pass -E to sudo to keep the current environment.
         capture_output: If True, capture stdout and stderr into the CompletedProcess object.
         check: If True, raise an exception if the command returns a non-zero exit code.
         text: If True, decode stdout/stderr to str; if False, return bytes.
 
     Returns:
-        subprocess.CompletedProcess: The result object with attributes:
-            - `args`: The command arguments.
-            - `returncode`: The exit status.
-            - `stdout`: Captured standard output (if `capture_output=True`).
-            - `stderr`: Captured standard error (if `capture_output=True`).
+        subprocess.CompletedProcess: The result object with attributes args, returncode, stdout
+        (if capture_output=True), and stderr (if capture_output=True).
 
     Raises:
-        subprocess.CalledProcessError: If `check=True` and the command fails.
-        RuntimeError: If `want_sudo=True` but sudo is requested/required and not available.
+        subprocess.CalledProcessError: If check=True and the command fails.
+        RuntimeError: If want_sudo=True but sudo is requested/required and not available.
     """
     if env is None:
         env = dict(os.environ)

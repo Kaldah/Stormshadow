@@ -8,7 +8,26 @@ attack, including Call-ID management and session stickiness.
 import re
 import uuid
 from typing import Dict, Any, Optional, List
-from utils.spoofing import SIPPacketHandler
+try:
+    from utils.spoofing import SIPPacketHandler
+except Exception:  # pragma: no cover - fallback for docs/autodoc when module is missing
+    class SIPPacketHandler:  # type: ignore
+        """Fallback stub for documentation builds when utils.spoofing is unavailable.
+
+        This stub exposes the minimal API used by InviteFloodPacketHandler so that
+        Sphinx autodoc can import the module without errors.
+        """
+
+        VIA_PATTERN = re.compile(rb"Via:\s*(.*?)\r?\n", re.IGNORECASE)
+
+        def __init__(self, config: dict | None = None) -> None:  # noqa: D401
+            self.config = config or {}
+
+        def _parse_sip_uri(self, uri: str) -> dict:
+            return {}
+
+        def modify_packet_for_stickiness(self, original: bytes, new_session_id: str, mods: dict | None = None) -> bytes:
+            return original
 
 
 class InviteFloodPacketHandler(SIPPacketHandler):

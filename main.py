@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-StormShadow SIP-Only - Simplified SIP Testing Toolkit
+StormShadow - SIP Testing Toolkit
 
-A simplified version of StormShadow focused on SIP attacks with:
-- Modular shell scripts for iptables and Docker management
-- Simplified con    params : Parameters = argToParameters(args, unknown_args)
-- Reuse of existing utils from the main StormShadow project
-- Support for lab and attack modes separately or combined
+This edition of StormShadow focuses on SIP-only scenarios and provides:
+
+- Modular shell helpers for iptables and Docker management
+- Clean configuration mapping from CLI to runtime Parameters
+- Reuse of the primary StormShadow utilities where appropriate
+- Separate or combined Lab and Attack modes, plus a GUI
 
 Author: Corentin COUSTY
 License: Educational Use Only
@@ -29,7 +30,10 @@ import shutil
 import signal
 
 def print_banner() -> None:
-    """Print application banner."""
+    """Print the application banner.
+
+    This is purely cosmetic and writes an ASCII banner to the console.
+    """
     print_info(f"""
 ╔══════════════════════════════════════════════════════════════╗
 ║                    StormShadow SIP-Only                      ║
@@ -42,7 +46,11 @@ def print_banner() -> None:
 
 
 def create_argument_parser() -> argparse.ArgumentParser:
-    """Create and configure argument parser."""
+    """Create and configure the CLI argument parser.
+
+    Returns:
+        argparse.ArgumentParser: A configured parser with all supported options.
+    """
     parser = argparse.ArgumentParser(
         description="StormShadow SIP-Only - Modular SIP Attack / Lab Testing Toolkit",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -162,16 +170,12 @@ are required and restart itself with sudo while preserving your virtual environm
     return parser
 
 def ensure_root_or_reexec() -> None:
-    """Ensure the program runs as root; otherwise relaunch with sudo.
+    """Ensure the program runs with root privileges.
 
-    Uses run_python with want_sudo=True so the same interpreter (virtualenv)
-    and environment are preserved under sudo.
-
-    Behavior:
-    - If already root (euid==0): return and continue.
-    - If not root: spawn a privileged child process running this script with the
-      same CLI args, allow an interactive sudo password prompt, then exit the
-      current (unprivileged) process with the child's return code.
+    If the effective user is root, this function returns immediately.
+    Otherwise, it replaces the current process with a `sudo`-invoked instance
+    of the same interpreter and script, preserving the current virtual
+    environment by using ``sys.executable``.
     """
     try:
         if os.geteuid() == 0:
@@ -197,14 +201,17 @@ def ensure_root_or_reexec() -> None:
     os.execvpe(args[0], args, os.environ.copy())
 
 def argToParameters(args: argparse.Namespace, unknown_args: list[str]) -> Parameters:
-    """
-    Convert command line arguments to Parameters object.
+    """Convert CLI arguments into a ``Parameters`` object.
+
+    The function maps known argparse options and also converts unknown
+    ``--key value`` or ``--flag`` pairs into entries on the Parameters.
 
     Args:
-        args: Parsed command line arguments
+        args: Parsed command line arguments from ``argparse``.
+        unknown_args: Any unparsed arguments (e.g., passthrough flags).
 
     Returns:
-        Parameters: Parameters object with the provided arguments
+        Parameters: An instance populated with both known and unknown values.
     """
     print_info(f"Converting command line parameters to Config: {args}")
 
@@ -234,7 +241,15 @@ def argToParameters(args: argparse.Namespace, unknown_args: list[str]) -> Parame
     return parameters
 
 def signal_handler(stormshadow_instance: 'StormShadow'):
-    """Create a signal handler that properly cleans up the StormShadow instance."""
+    """Create a signal handler that performs a clean shutdown.
+
+    Args:
+        stormshadow_instance (StormShadow): The running instance to stop.
+
+    Returns:
+        Callable[[int, Optional[FrameType]], None]: A function suitable for
+        ``signal.signal`` registration.
+    """
     def handler(signum: int, frame: Optional[FrameType]) -> None:
         print_info(f"\nReceived signal {signum}. Initiating clean shutdown...")
         try:
@@ -247,7 +262,11 @@ def signal_handler(stormshadow_instance: 'StormShadow'):
     return handler
 
 def main() -> int:
-    """Main entry point."""
+    """Main entry point.
+
+    Returns:
+        int: Process exit code (0 on success, non-zero on error).
+    """
 
     # Elevate to root if needed before doing anything else
     ensure_root_or_reexec()

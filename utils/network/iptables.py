@@ -578,11 +578,14 @@ def ipset_add_port(name: str, port: int, timeout: int = DEFAULT_TTL_SECONDS, dry
 
 def ensure_nfqueue_rule_using_ipset(queue_num: int, suid: str, anchor_chain: str = "INPUT", set_timeout: int = DEFAULT_TTL_SECONDS, dry_run: bool = False) -> Optional[str]:
     """
-    Better approach: use ipset to control which ports are sent to NFQUEUE, with per-port TTL.
-    - Create ipset set name 'stormshadow_ports_{suid}' (bitmap:port, timeout)
-    - Insert a single iptables rule in STORMSHADOW chain matching '-m set --match-set <set> dst'
-      and sending to NFQUEUE. The set entries (ports) expire automatically.
-    Returns the set name if successful, else None.
+        Better approach: use ipset to control which ports are sent to NFQUEUE, with per-port TTL.
+
+        - Create ipset set name "stormshadow_ports_{suid}" (bitmap:port, timeout).
+        - Insert a single iptables rule in STORMSHADOW chain matching
+            "-m set --match-set <set> dst" and sending to NFQUEUE.
+        - Entries (ports) in the set expire automatically.
+
+        Returns the set name if successful, else None.
     """
     if not has_ipset():
         print_warning("ipset not available; falling back to direct iptables rules.")

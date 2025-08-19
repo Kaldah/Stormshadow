@@ -12,10 +12,10 @@ utils.network.iptables module
    :show-inheritance:
    :undoc-members:
 
-utils.network.return\_path module
----------------------------------
+utils.network.packet\_handler module
+------------------------------------
 
-.. automodule:: utils.network.return_path
+.. automodule:: utils.network.packet_handler
    :members:
    :show-inheritance:
    :undoc-members:

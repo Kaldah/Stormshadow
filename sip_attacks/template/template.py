@@ -3,7 +3,7 @@
 from typing import List, Optional
 from pathlib import Path
 from utils.attack.attack_enums import AttackProtocol, AttackType
-from utils.core.logs import print_info
+from utils.core.logs import print_info, print_error
 from utils.interfaces.attack_interface import AttackInterface
 
 from utils.registry.metadata import ModuleInfo
@@ -61,7 +61,14 @@ class TemplateAttack(AttackInterface):
 
     def cleanup(self) -> None:
         print_info("Cleaning up template attack resources")
-        # Implement any necessary cleanup logic here
+        # Stop spoofing if it was enabled
+        if hasattr(self, 'spoofer') and self.spoofer:
+            print_info("Stopping spoofer as part of cleanup...")
+            try:
+                self.stop_spoofing()
+            except Exception as e:
+                print_error(f"Error stopping spoofer during cleanup: {e}")
+        # Implement any other necessary cleanup logic here
     
     def end(self):
         print_info("Ending the template attack")

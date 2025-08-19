@@ -177,12 +177,14 @@ def get_command_version(command_name: str, version_arg: str = '--version') -> Op
         Optional[str]: Version string if successful, None otherwise
     """
     try:
-        result = run_gui_command(
+        # For version checks, use subprocess directly to avoid logging
+        import subprocess
+        
+        result = subprocess.run(
             [command_name, version_arg],
-            operation_name=f"get {command_name} version",
-            need_sudo=False,  # Version checks usually don't need sudo
-            check=False,  # Don't raise exception if command fails
-            capture_output=True
+            capture_output=True,
+            text=True,
+            check=False
         )
 
         if result.returncode == 0:

@@ -24,6 +24,10 @@ class StatusPanel:
         """
         self.parent = parent
         self.gui_manager = gui_manager
+        
+        # Cache for system info to avoid repeated checks
+        self._docker_version_cached = None
+        self._docker_checked = False
 
         # Create the main frame
         self.main_frame = ttk.Frame(parent)
@@ -247,18 +251,23 @@ class StatusPanel:
             self.info_labels["Root Access:"].config(
                 text="⚠ Not running as root", style="Warning.TLabel")
 
-        # Update Docker status
-        try:
-            from gui.utils.command_utils import get_command_version
-            docker_version = get_command_version('docker')
-            if docker_version:
-                self.info_labels["Docker Status:"].config(
-                    text="✓ Available", style="Success.TLabel")
-            else:
-                self.info_labels["Docker Status:"].config(
-                    text="✗ Not available", style="Error.TLabel")
-        except Exception:
-            self.info_labels["Docker Status:"].config(text="✗ Not available", style="Error.TLabel")
+        # Update Docker status (cached to avoid repeated checks)
+        if not self._docker_checked:
+            try:
+                from gui.utils.command_utils import get_command_version
+                self._docker_version_cached = get_command_version('docker')
+                self._docker_checked = True
+            except Exception:
+                self._docker_version_cached = None
+                self._docker_checked = True
+        
+        # Use cached result
+        if self._docker_version_cached:
+            self.info_labels["Docker Status:"].config(
+                text="✓ Available", style="Success.TLabel")
+        else:
+            self.info_labels["Docker Status:"].config(
+                text="✗ Not available", style="Error.TLabel")
 
         # Update available attacks count
         attacks = self.gui_manager.get_available_attacks()
@@ -357,6 +366,12 @@ class StatusPanel:
     def update_status(self, instance_name: str, status: str):
         """Public method to update status (called from main window)."""
         self._on_status_update(instance_name, status)
+
+    def refresh_docker_status(self):
+        """Force refresh of Docker status check."""
+        self._docker_checked = False
+        self._docker_version_cached = None
+        self._update_system_info()
 
     def cleanup(self):
         """Clean up the status panel resources."""

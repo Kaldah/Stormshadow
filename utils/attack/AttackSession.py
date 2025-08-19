@@ -77,15 +77,26 @@ class AttackSession:
                     return
                 else:
                     print_info("Dry-run mode is implemented, proceeding with stopping the (fake) attack.")
+            
+            # Stop spoofing FIRST before stopping the main attack
+            # This ensures spoofer processes are properly terminated
+            if self.enable_spoofing:
+                print_info("Stopping spoofing...")
+                try:
+                    if self.use_default_spoofing:
+                        print_in_dev("Default spoofing not implemented yet, stopping module spoofing.")
+                        self.main_attack.stop_spoofing()
+                    else:
+                        self.main_attack.stop_spoofing()
+                    print_success("Spoofing stopped successfully.")
+                except Exception as e:
+                    print_error(f"Error stopping spoofing: {e}")
+            
+            # Now stop the main attack
             self.main_attack.stop()
             self.status = AttackStatus.STOPPED
             print_info(f"Attack {self.name} stopped successfully.")
-            if self.enable_spoofing:
-                if self.use_default_spoofing:
-                    print_in_dev("Default spoofing not implemented yet, stopping module spoofing.")
-                    self.main_attack.stop_spoofing()
-                else:
-                    self.main_attack.stop_spoofing()
+            
             # Best-effort cleanup of any rules with this session SUID
             try:
                 remove_rules_for_suid(self.suid, dry_run=self.dry_run)

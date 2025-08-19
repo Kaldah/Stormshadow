@@ -257,6 +257,13 @@ def UpdateDefaultConfigFromCLIArgs(config: Config, args: Parameters) -> None:
                     parameters.set("max_count", value, ["attack"])
                 else:
                     print_warning(f"Unsupported type for max_count: {type(value)}. Expected int.")
+            case "delay":
+                # Set delay between packets for attacks
+                if isinstance(value, (int, float)):
+                    print_debug(f"Setting delay to '{value}' seconds")
+                    parameters.set("delay", value, ["attack"])
+                else:
+                    print_warning(f"Unsupported type for delay: {type(value)}. Expected int or float.")
             case "open_window":
                 # Set whether to open a new terminal window for the attack
                 if isinstance(value, bool) :

@@ -73,6 +73,12 @@ class AttackInterface(ABC):
     def stop(self):
         """Stop the attack (default behavior: call cleanup)"""
         print(f"[INFO] Stopping attack on {self.target_ip}")
+        # Ensure spoofer is stopped when attack is stopped
+        if hasattr(self, 'spoofing_implemented') and self.spoofing_implemented:
+            try:
+                self.stop_spoofing()
+            except Exception as e:
+                print(f"[ERROR] Error stopping spoofer during stop: {e}")
         self.cleanup()
 
     def resume(self) -> bool:
@@ -84,6 +90,12 @@ class AttackInterface(ABC):
     def end(self):
         """End the attack (default behavior: call cleanup)"""
         print(f"[INFO] Ending attack on {self.target_ip}")
+        # Ensure spoofer is stopped before cleanup
+        if hasattr(self, 'spoofing_implemented') and self.spoofing_implemented:
+            try:
+                self.stop_spoofing()
+            except Exception as e:
+                print(f"[ERROR] Error stopping spoofer during end: {e}")
         self.cleanup()
 
     @abstractmethod

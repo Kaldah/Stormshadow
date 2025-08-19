@@ -13,7 +13,7 @@ import subprocess
 
 from utils.config.config import Parameters
 from utils.core.stormshadow import StormShadow
-from utils.core.logs import print_info, print_error, print_debug, print_success
+from utils.core.logs import print_info, print_error, print_debug, print_success, print_warning
 from utils.attack.attack_modules_finder import find_attack_modules
 from utils.network.iptables import generate_suid
 
@@ -137,6 +137,15 @@ class GUIStormManager:
             for key, value in config_params.items():
                 if key not in attack_params:
                     attack_params[key] = value
+            
+            # Convert delay_ms (milliseconds) to delay (seconds) for attack modules
+            if "delay_ms" in attack_params:
+                delay_ms = attack_params.get("delay_ms", 0)
+                if isinstance(delay_ms, (int, float)) and delay_ms > 0:
+                    attack_params["delay"] = delay_ms / 1000.0  # Convert ms to seconds
+                    print_debug(f"Converted delay_ms {delay_ms}ms to delay {attack_params['delay']}s")
+                # Remove delay_ms since attack modules don't use it
+                del attack_params["delay_ms"]
 
             # Create StormShadow instance with shared SUID
             storm_instance = StormShadow(
@@ -238,6 +247,7 @@ class GUIStormManager:
 
         try:
             def run_instance():
+                completed_naturally = False
                 try:
                     print_info(f"Starting instance {instance_name}...")
                     instance.is_running = True
@@ -246,8 +256,13 @@ class GUIStormManager:
                     # Run the StormShadow instance
                     instance.instance.run()
 
-                    self._notify_status_change(instance_name, "running")
-                    print_success(f"Instance {instance_name} started successfully")
+                    # Attack completed - ensure spoofer cleanup
+                    print_info(f"Attack {instance_name} completed, cleaning up spoofer...")
+                    self._cleanup_spoofer_processes()
+                    
+                    completed_naturally = True  # Mark as natural completion
+                    self._notify_status_change(instance_name, "completed")
+                    print_success(f"Instance {instance_name} completed successfully")
 
                 except subprocess.CalledProcessError as e:
                     # Handle sudo permission errors specifically
@@ -271,7 +286,9 @@ class GUIStormManager:
                     self._notify_status_change(instance_name, "error")
                 finally:
                     instance.is_running = False
-                    self._notify_status_change(instance_name, "stopped")
+                    # Only send "stopped" if it wasn't a natural completion
+                    if not completed_naturally:
+                        self._notify_status_change(instance_name, "stopped")
 
             # Create and start thread
             instance.thread = threading.Thread(target=run_instance, daemon=True)
@@ -315,6 +332,12 @@ class GUIStormManager:
             if instance.thread and instance.thread.is_alive():
                 instance.thread.join(timeout=5.0)
 
+            # Additional cleanup: ensure any remaining spoofer processes are terminated
+            try:
+                self._cleanup_spoofer_processes()
+            except Exception as e:
+                print_warning(f"Error during spoofer cleanup: {e}")
+
             instance.is_running = False
             self._notify_status_change(instance_name, "stopped")
             print_success(f"Instance {instance_name} stopped successfully")
@@ -323,6 +346,55 @@ class GUIStormManager:
         except Exception as e:
             print_error(f"Failed to stop instance {instance_name}: {e}")
             return False
+
+    def _cleanup_spoofer_processes(self):
+        """
+        Emergency cleanup of any remaining spoofer processes.
+        This is a failsafe to ensure no spoofer processes remain running.
+        """
+        try:
+            import os
+            import signal
+            import subprocess
+            
+            print_debug("Performing emergency spoofer process cleanup...")
+            
+            # Use pkill to find and terminate spoofer processes
+            try:
+                # First try to find spoofer processes gracefully
+                result = subprocess.run(['pgrep', '-f', 'spoofer.py'], capture_output=True, text=True)
+                if result.returncode == 0:
+                    pids = result.stdout.strip().split('\n')
+                    pids = [pid for pid in pids if pid.strip()]
+                    
+                    if pids:
+                        print_debug(f"Found {len(pids)} spoofer processes to clean up")
+                        # Try graceful termination first
+                        subprocess.run(['pkill', '-TERM', '-f', 'spoofer.py'], capture_output=True)
+                        
+                        # Give processes time to terminate gracefully
+                        import time
+                        time.sleep(1)
+                        
+                        # Check if any processes remain and force kill them
+                        result = subprocess.run(['pgrep', '-f', 'spoofer.py'], capture_output=True, text=True)
+                        if result.returncode == 0:
+                            print_debug("Some spoofer processes didn't terminate gracefully, force killing")
+                            subprocess.run(['pkill', '-KILL', '-f', 'spoofer.py'], capture_output=True)
+                        
+                        print_info("Spoofer process cleanup completed")
+                    else:
+                        print_debug("No stray spoofer processes found")
+                else:
+                    print_debug("No spoofer processes found running")
+                    
+            except FileNotFoundError:
+                print_debug("pgrep/pkill not available, skipping spoofer process cleanup")
+            except Exception as e:
+                print_debug(f"Error using pgrep/pkill: {e}")
+                
+        except Exception as e:
+            print_warning(f"Error during spoofer process cleanup: {e}")
 
     def remove_instance(self, instance_name: str) -> bool:
         """

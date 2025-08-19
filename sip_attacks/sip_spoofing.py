@@ -1,4 +1,6 @@
 import os
+import signal
+import subprocess
 from signal import SIGTERM
 from subprocess import CalledProcessError, Popen
 from typing import Optional
@@ -124,19 +126,44 @@ class SipPacketSpoofer:
             try:
                 # Terminate the whole process group (terminal + spoofer)
                 p = self.spoofer_process
-                pgid = os.getpgid(p.pid)
-                os.killpg(pgid, SIGTERM)
-
-                print_debug(f"Terminating spoofer process group with PID: {self.spoofer_process.pid}")
-                # Wait for the process to terminate
+                print_debug(f"Terminating spoofer process with PID: {p.pid}")
                 
-                return_value = self.spoofer_process.wait(timeout=3)
-                if return_value != 0:
-                    print_error(f"Spoofer process terminated with non-zero exit code: {return_value}")
-                else:
-                    print_success("Spoofer process terminated successfully")
+                # Try graceful termination first
+                try:
+                    pgid = os.getpgid(p.pid)
+                    os.killpg(pgid, SIGTERM)
+                    print_debug(f"Sent SIGTERM to process group {pgid}")
+                except ProcessLookupError:
+                    print_debug("Process group already terminated")
+                except OSError as e:
+                    print_debug(f"Error getting process group ID: {e}, trying direct termination")
+                    p.terminate()
+
+                # Wait for the process to terminate gracefully
+                try:
+                    return_value = self.spoofer_process.wait(timeout=3)
+                    if return_value != 0:
+                        print_warning(f"Spoofer process terminated with non-zero exit code: {return_value}")
+                    else:
+                        print_success("Spoofer process terminated successfully")
+                except subprocess.TimeoutExpired:
+                    print_warning("Spoofer process did not terminate gracefully, forcing termination")
+                    try:
+                        # Force kill if graceful termination failed
+                        pgid = os.getpgid(p.pid)
+                        os.killpg(pgid, signal.SIGKILL)
+                        p.wait(timeout=1)
+                        print_success("Spoofer process force-terminated successfully")
+                    except (ProcessLookupError, subprocess.TimeoutExpired, OSError):
+                        print_warning("Could not force-terminate spoofer process, it may already be dead")
+                
+                # Clear the process reference
+                self.spoofer_process = None
+                
             except Exception as e:
-                print_error(f"Error terminating spoofer process group: {e}")
+                print_error(f"Error terminating spoofer process: {e}")
+                # Clear the process reference even if termination failed
+                self.spoofer_process = None
 
         # Prefer removing our tagged rule in dedicated chain
         removed = False

@@ -354,6 +354,7 @@ class AttackPanel:
         """Stop the current attack."""
         if self.current_attack_instance:
             self._add_status_message(f"Stopping attack: {self.current_attack_instance}")
+            self._add_status_message("Cleaning up spoofer processes and iptables rules...")
 
             success = self.gui_manager.stop_instance(self.current_attack_instance)
             if success:
@@ -361,9 +362,14 @@ class AttackPanel:
                 self.current_attack_instance = None
                 self._update_button_states(attack_running=False)
                 self._add_status_message("Attack stopped successfully!")
+                self._add_status_message("All spoofer processes and iptables rules have been cleaned up.")
             else:
                 self._add_status_message("Failed to stop attack!")
-                messagebox.showerror("Error", "Failed to stop the attack.")
+                self._add_status_message("Some spoofer processes or iptables rules may still be active.")
+                messagebox.showerror("Error", "Failed to stop the attack. Check logs for details.")
+        else:
+            self._add_status_message("No attack is currently running.")
+            messagebox.showwarning("Warning", "No attack is currently running.")
 
     def _reset_form(self):
         """Reset all form fields to default values."""
@@ -423,10 +429,20 @@ class AttackPanel:
         if instance_name == self.current_attack_instance:
             self._add_status_message(f"Attack status: {status}")
 
-            if status in ["stopped", "error"]:
+            if status in ["stopped", "error", "completed"]:
                 self._update_button_states(attack_running=False)
+                
                 if status == "error":
                     self._add_status_message("Attack encountered an error!")
+                elif status == "completed":
+                    self._add_status_message("Attack completed successfully!")
+                    self._add_status_message("Spoofer processes and iptables rules have been cleaned up automatically.")
+                    # Clear the current attack instance since it completed
+                    self.current_attack_instance = None
+                elif status == "stopped":
+                    self._add_status_message("Attack was stopped manually.")
+                    # Clear the current attack instance since it was stopped
+                    self.current_attack_instance = None
 
     def refresh_attacks(self):
         """Refresh the list of available attack modules."""

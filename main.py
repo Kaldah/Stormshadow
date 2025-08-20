@@ -22,7 +22,7 @@ from typing import Optional
 from types import FrameType
 
 from utils.config.config import Parameters
-from utils.core.logs import print_in_dev, print_info
+from utils.core.logs import print_in_dev, print_info, print_warning
 from utils.core.stormshadow import StormShadow
 from gui import StormShadowGUI
 import shutil
@@ -272,6 +272,9 @@ def main() -> int:
     ensure_root_or_reexec()
 
     print_banner()
+    # Immediate legal/ethical warning
+    print_warning("This tool can generate DDoS-like traffic and spoof UDP sources. For educational and authorized testing only. Use on systems and networks you own or have explicit written permission to test.")
+    print_warning("Misuse may be illegal and disruptive. Prefer the built-in lab, dry-run mode, and conservative rates.")
     
     # Create argument parser
     parser = create_argument_parser()

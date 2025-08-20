@@ -8,6 +8,10 @@ Simplified SIP testing toolkit focused on spoofed SIP traffic, built on Linux ip
 
 ---
 
+## ⚠ Important usage warning
+
+This project contains DDoS-style traffic generation and UDP source-address spoofing capabilities. It is provided strictly for educational use and authorized security testing on systems and networks you own or for which you have explicit, written permission. Unauthorized use may be illegal and can disrupt services. You are solely responsible for complying with applicable laws, organizational policies, and provider/hosting terms. Prefer the built-in lab, dry-run mode, and rate limits; do not target production systems.
+
 ## Highlights
 
 - SIP‑focused, fast prototyping toolkit (Invite flood and more via pluggable modules)
@@ -245,6 +249,16 @@ You can run lab alone (`--mode lab`) or together with attacks (`--mode both`). U
 
 ## Legal and safety
 
-This toolkit is for educational and defensive testing on systems you own or are authorized to assess. Misuse may be illegal. Use responsibly.
+This toolkit is for educational and defensive testing only. By using it, you agree to:
+
+- Operate solely on systems and networks you own or have explicit, written authorization to test.
+- Comply with applicable laws, regulations, organizational policies, and provider/hosting terms.
+- Understand that certain features can generate high-rate traffic and spoof UDP source addresses, which can disrupt services if misused.
+- Accept full responsibility for any consequences of your actions; the authors and contributors disclaim all liability.
+
+Best practices:
+- Use the included lab environment for safe experiments.
+- Start with dry-run mode and conservative rate/packet limits.
+- Avoid targeting production infrastructure and third-party services.
 
 Author: Corentin COUSTY
